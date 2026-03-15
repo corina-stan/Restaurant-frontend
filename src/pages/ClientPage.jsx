@@ -16,9 +16,21 @@ export default function ClientPage() {
         const initSession = async () => {
             try {
                 const res = await api.post(`/tables/scan/${tableNumber}/`)
-                setSessionToken(res.data.session_token)
+                const token = res.data.session_token
+                setSessionToken(token)
+
                 const menuRes = await api.get('/menu/products/?available_only=true')
                 setMenu(menuRes.data)
+
+                try {
+                    const ordersRes = await api.get(`/orders/table/${tableNumber}/`)
+                    if (ordersRes.data.length > 0) {
+                        setOrder(ordersRes.data[ordersRes.data.length - 1])
+                    }
+                } catch (err) {
+                    console.log('Nicio comandă activă')
+                }
+
             } catch (err) {
                 console.error('Eroare inițializare:', err)
             } finally {
@@ -27,6 +39,7 @@ export default function ClientPage() {
         }
         initSession()
     }, [tableNumber])
+
 
     useWebSocket(
         `ws://localhost:5173/ws/table/${tableNumber}/`,
