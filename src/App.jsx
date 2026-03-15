@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import ClientPage from './pages/ClientPage'
 import KitchenPage from './pages/KitchenPage'
+import WaiterPage from './pages/WaiterPage'
 
 function App() {
   return (
@@ -8,6 +9,7 @@ function App() {
       <Routes>
         <Route path="/table/:tableNumber" element={<ClientPage />} />
         <Route path="/kitchen" element={<KitchenPage />} />
+        <Route path="/waiter" element={<WaiterPage />} />
       </Routes>
     </BrowserRouter>
   )
