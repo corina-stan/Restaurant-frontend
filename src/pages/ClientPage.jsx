@@ -12,25 +12,39 @@ export default function ClientPage() {
     const [loading, setLoading] = useState(true)
     const [notes, setNotes] = useState('')
 
+    const updateOrder = (newOrder) => {
+        if (newOrder) {
+            sessionStorage.setItem(`order_table_${tableNumber}`, JSON.stringify(newOrder))
+        } else {
+            sessionStorage.removeItem(`order_table_${tableNumber}`)
+        }
+        setOrder(newOrder)
+    }
+
     useEffect(() => {
+        const savedOrder = sessionStorage.getItem(`order_table_${tableNumber}`)
+        if (savedOrder) {
+            setOrder(JSON.parse(savedOrder))
+        }
+
         const initSession = async () => {
             try {
                 const res = await api.post(`/tables/scan/${tableNumber}/`)
-                const token = res.data.session_token
-                setSessionToken(token)
+                setSessionToken(res.data.session_token)
 
                 const menuRes = await api.get('/menu/products/?available_only=true')
                 setMenu(menuRes.data)
 
-                try {
-                    const ordersRes = await api.get(`/orders/table/${tableNumber}/`)
-                    if (ordersRes.data.length > 0) {
-                        setOrder(ordersRes.data[ordersRes.data.length - 1])
+                if (!savedOrder) {
+                    try {
+                        const ordersRes = await api.get(`/orders/table/${tableNumber}/`)
+                        if (ordersRes.data.length > 0) {
+                            updateOrder(ordersRes.data[ordersRes.data.length - 1])
+                        }
+                    } catch (err) {
+                        console.log('Nicio comandă activă')
                     }
-                } catch (err) {
-                    console.log('Nicio comandă activă')
                 }
-
             } catch (err) {
                 console.error('Eroare inițializare:', err)
             } finally {
@@ -40,7 +54,6 @@ export default function ClientPage() {
         initSession()
     }, [tableNumber])
 
-
     useWebSocket(
         `ws://localhost:5173/ws/table/${tableNumber}/`,
         (data) => {
@@ -48,7 +61,7 @@ export default function ClientPage() {
             if (data.type === 'order_update') {
                 setOrder(prev => {
                     if (!prev) return prev
-                    return {
+                    const updated = {
                         ...prev,
                         items: prev.items.map(item =>
                             item.id === data.item_id
@@ -56,6 +69,8 @@ export default function ClientPage() {
                                 : item
                         )
                     }
+                    sessionStorage.setItem(`order_table_${tableNumber}`, JSON.stringify(updated))
+                    return updated
                 })
             }
             if (data.type === 'product_availability') {
@@ -89,15 +104,28 @@ export default function ClientPage() {
     const placeOrder = async () => {
         if (!sessionToken || cart.length === 0) return
         try {
-            const res = await api.post('/orders/create/', {
+            const payload = {
                 session_token: sessionToken,
                 notes,
                 items: cart.map(i => ({
                     product_id: i.product.id,
-                    quantity: i.quantity
+                    quantity: i.quantity,
+                    notes: i.notes || ''
                 }))
-            })
-            setOrder(res.data)
+            }
+
+            if (order) {
+                payload.order_id = order.id
+            }
+
+            console.log('order curent:', order)
+            console.log('Payload trimis:', payload)
+
+            const res = await api.post('/orders/create/', payload)
+
+            console.log('Răspuns server:', res.data)
+
+            updateOrder(res.data)
             setCart([])
             setNotes('')
         } catch (err) {
@@ -121,7 +149,34 @@ export default function ClientPage() {
     return (
         <div style={styles.container}>
             <h1 style={styles.title}>Masa {tableNumber}</h1>
-
+            {order && order._showMenu && (
+                <>
+                    <h2 style={styles.subtitle}>Adaugă la comandă</h2>
+                    {['kitchen', 'bar'].map(dept => (
+                        <div key={dept}>
+                            <h3 style={styles.deptTitle}>
+                                {dept === 'kitchen' ? '🍳 Bucătărie' : '🍹 Bar'}
+                            </h3>
+                            {menu
+                                .filter(p => p.category.department === dept && p.is_available)
+                                .map(product => (
+                                    <div key={product.id} style={styles.productCard}>
+                                        <div>
+                                            <div style={styles.productName}>{product.name}</div>
+                                            <div style={styles.productPrice}>{product.price} lei</div>
+                                        </div>
+                                        <button
+                                            style={styles.addBtn}
+                                            onClick={() => addToCart(product)}
+                                        >
+                                            + Adaugă
+                                        </button>
+                                    </div>
+                                ))}
+                        </div>
+                    ))}
+                </>
+            )}
             {!order ? (
                 <>
                     <h2 style={styles.subtitle}>Meniu</h2>
@@ -154,14 +209,26 @@ export default function ClientPage() {
                             <h2 style={styles.subtitle}>Coș</h2>
                             {cart.map(item => (
                                 <div key={item.product.id} style={styles.cartItem}>
-                                    <span>{item.quantity}x {item.product.name}</span>
-                                    <span>{(item.quantity * item.product.price).toFixed(2)} lei</span>
-                                    <button
-                                        style={styles.removeBtn}
-                                        onClick={() => removeFromCart(item.product.id)}
-                                    >
-                                        ✕
-                                    </button>
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                                            <span>{item.quantity}x {item.product.name}</span>
+                                            <span>{(item.quantity * item.product.price).toFixed(2)} lei</span>
+                                            <button
+                                                style={styles.removeBtn}
+                                                onClick={() => removeFromCart(item.product.id)}
+                                            >✕</button>
+                                        </div>
+                                        <input
+                                            style={styles.itemNotes}
+                                            placeholder="Mențiuni pentru acest produs..."
+                                            value={item.notes || ''}
+                                            onChange={e => setCart(prev => prev.map(i =>
+                                                i.product.id === item.product.id
+                                                    ? { ...i, notes: e.target.value }
+                                                    : i
+                                            ))}
+                                        />
+                                    </div>
                                 </div>
                             ))}
                             <div style={styles.cartTotal}>
@@ -184,21 +251,65 @@ export default function ClientPage() {
                     <h2 style={styles.subtitle}>Comanda #{order.id}</h2>
                     {order.items.map(item => (
                         <div key={item.id} style={styles.orderItem}>
-                            <span>{item.quantity}x {item.product.name}</span>
+                            <div>
+                                <span>{item.quantity}x {item.product.name}</span>
+                                {item.notes && (
+                                    <div style={{ fontSize: 12, color: '#f59e0b', marginTop: 2 }}>
+                                        Mențiuni: {item.notes}
+                                    </div>
+                                )}
+                            </div>
                             <span style={styles.statusBadge}>
                                 {getStatusLabel(item.status)}
                             </span>
                         </div>
                     ))}
                     <div style={styles.cartTotal}>
-                        Total: {order.total} lei
+                        Total: {order.items
+                            .filter(i => i.status !== 'rejected')
+                            .reduce((s, i) => s + i.quantity * parseFloat(i.unit_price), 0)
+                            .toFixed(2)} lei
                     </div>
-                    <button
-                        style={styles.orderBtn}
-                        onClick={() => { setOrder(null) }}
-                    >
-                        + Adaugă mai multe
-                    </button>
+
+                    {cart.length === 0 ? (
+                        <button
+                            style={styles.orderBtn}
+                            onClick={() => setOrder(prev => ({ ...prev, _showMenu: true }))}
+                        >
+                            + Adaugă mai multe
+                        </button>
+                    ) : (
+                        <div style={styles.cart}>
+                            <h2 style={styles.subtitle}>Adaugă la comandă</h2>
+                            {cart.map(item => (
+                                <div key={item.product.id} style={styles.cartItem}>
+                                    <div style={{ flex: 1 }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                                            <span>{item.quantity}x {item.product.name}</span>
+                                            <span>{(item.quantity * item.product.price).toFixed(2)} lei</span>
+                                            <button
+                                                style={styles.removeBtn}
+                                                onClick={() => removeFromCart(item.product.id)}
+                                            >✕</button>
+                                        </div>
+                                        <input
+                                            style={styles.itemNotes}
+                                            placeholder="Mențiuni pentru acest produs..."
+                                            value={item.notes || ''}
+                                            onChange={e => setCart(prev => prev.map(i =>
+                                                i.product.id === item.product.id
+                                                    ? { ...i, notes: e.target.value }
+                                                    : i
+                                            ))}
+                                        />
+                                    </div>
+                                </div>
+                            ))}
+                            <button style={styles.orderBtn} onClick={placeOrder}>
+                                Adaugă la comanda #{order.id}
+                            </button>
+                        </div>
+                    )}
                 </div>
             )}
         </div>
@@ -208,7 +319,7 @@ export default function ClientPage() {
 const styles = {
     container: { maxWidth: 480, margin: '0 auto', padding: 16, fontFamily: 'sans-serif' },
     center: { display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' },
-    title: { fontSize: 24, fontWeight: 'bold', marginBottom: 8 },
+    title: { fontSize: 24, fontWeight: 'bold', marginBottom: 8, textAlign: 'center' },
     subtitle: { fontSize: 20, fontWeight: 'bold', marginTop: 16, marginBottom: 8 },
     deptTitle: { fontSize: 16, color: '#666', marginTop: 12 },
     productCard: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #eee' },
@@ -219,9 +330,10 @@ const styles = {
     cart: { marginTop: 24, background: '#f9fafb', borderRadius: 12, padding: 16 },
     cartItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0' },
     cartTotal: { fontWeight: 'bold', marginTop: 8, fontSize: 18 },
-    notes: { width: '100%', marginTop: 12, padding: 8, borderRadius: 8, border: '1px solid #ddd', resize: 'vertical', minHeight: 60 },
+    notes: { width: '100%', marginTop: 12, padding: 8, borderRadius: 8, border: '1px solid #ddd', resize: 'vertical', minHeight: 60, boxSizing: 'border-box' },
     orderBtn: { width: '100%', marginTop: 12, background: '#16a34a', color: 'white', border: 'none', borderRadius: 10, padding: '12px 0', fontSize: 16, cursor: 'pointer' },
     orderStatus: { marginTop: 16 },
     orderItem: { display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #eee' },
-    statusBadge: { fontSize: 14, color: '#555' }
+    statusBadge: { fontSize: 14, color: '#555' },
+    itemNotes: { width: '100%', padding: '4px 8px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, boxSizing: 'border-box' },
 }

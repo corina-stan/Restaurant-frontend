@@ -34,7 +34,7 @@ export default function BarPage() {
                                 product_name: item.product.name,
                                 quantity: item.quantity,
                                 table_number: order.table_number,
-                                notes: order.notes,
+                                notes: item.notes || '',
                                 timestamp: order.created_at
                             })
                         }
@@ -75,13 +75,14 @@ export default function BarPage() {
     }
 
     const markUnavailable = async (item) => {
-        console.log('item:', item)  // adaugă această linie temporar
+        console.log('item:', item)
         try {
             await api.patch(
                 `/menu/products/${item.product_id}/toggle_availability/`,
                 {},
                 { headers: { Authorization: `Bearer ${token}` } }
             )
+            setItems(prev => prev.filter(i => i.item_id !== item.item_id))
             alert(`${item.product_name} marcat ca indisponibil în meniu!`)
         } catch (err) {
             console.error('Eroare:', err)
@@ -105,9 +106,7 @@ export default function BarPage() {
                     value={credentials.password}
                     onChange={e => setCredentials(p => ({ ...p, password: e.target.value }))}
                 />
-                <button style={styles.loginBtn} onClick={login}>
-                    Intră
-                </button>
+                <button style={styles.loginBtn} onClick={login}>Intră</button>
             </div>
         )
     }

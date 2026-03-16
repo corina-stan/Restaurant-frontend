@@ -9,6 +9,9 @@ export default function WaiterPage() {
     const [loggedIn, setLoggedIn] = useState(false)
     const [credentials, setCredentials] = useState({ username: '', password: '' })
     const seenOrderIds = useRef(new Set())
+    const [payingOrder, setPayingOrder] = useState(null)
+    const [paymentMethod, setPaymentMethod] = useState('cash')
+    const [tip, setTip] = useState(0)
 
     const login = async () => {
         try {
@@ -47,7 +50,7 @@ export default function WaiterPage() {
                 setNotifications(prev => [data, ...prev])
             }
             if (data.type === 'new_order') {
-                loadOrders(token)
+                if (token) loadOrders(token)
             }
             if (data.type === 'product_availability') {
                 if (!data.is_available) {
@@ -83,6 +86,40 @@ export default function WaiterPage() {
             loadOrders(token)
         } catch (err) {
             console.error('Eroare:', err)
+        }
+    }
+
+    const processPayment = async (order) => {
+        const unservedItems = order.items.filter(
+            i => !['served', 'rejected'].includes(i.status)
+        )
+
+        if (unservedItems.length > 0) {
+            const names = unservedItems.map(i => i.product.name).join(', ')
+            const confirm = window.confirm(
+                `Atenție! Următoarele produse nu sunt încă servite:\n${names}\n\nDorești să continui cu încasarea?`
+            )
+            if (!confirm) return
+        }
+
+        try {
+            await api.post(
+                '/payments/create/',
+                {
+                    order_id: order.id,
+                    method: paymentMethod,
+                    tip: parseFloat(tip) || 0
+                },
+                { headers: { Authorization: `Bearer ${token}` } }
+            )
+            setPayingOrder(null)
+            setTip(0)
+            setPaymentMethod('cash')
+            loadOrders(token)
+            alert(`Plată înregistrată! Total: ${(parseFloat(order.total) + (parseFloat(tip) || 0)).toFixed(2)} lei`)
+        } catch (err) {
+            console.error('Eroare plată:', err)
+            alert('Eroare la înregistrarea plății!')
         }
     }
 
@@ -185,7 +222,14 @@ export default function WaiterPage() {
                         )}
                         {order.items.map(item => (
                             <div key={item.id} style={styles.itemRow}>
-                                <span>{item.quantity}x {item.product.name}</span>
+                                <div>
+                                    <span>{item.quantity}x {item.product.name}</span>
+                                    {item.notes && (
+                                        <div style={{ fontSize: 12, color: '#f59e0b', marginTop: 2 }}>
+                                            {item.notes}
+                                        </div>
+                                    )}
+                                </div>
                                 <span style={{
                                     ...styles.statusPill,
                                     background: getStatusColor(item.status)
@@ -195,10 +239,95 @@ export default function WaiterPage() {
                             </div>
                         ))}
                         <div style={styles.orderTotal}>
-                            Total: {order.total} lei
+                            Total: {order.items
+                                .filter(i => i.status !== 'rejected')
+                                .reduce((sum, i) => sum + i.quantity * i.unit_price, 0)
+                                .toFixed(2)} lei
                         </div>
+                        <button
+                            style={styles.payBtn}
+                            onClick={() => {
+                                setPayingOrder(order)
+                                setTip(0)
+                                setPaymentMethod('cash')
+                            }}
+                        >
+                            Încasează
+                        </button>
                     </div>
                 ))
+            )}
+
+            {payingOrder && (
+                <div style={styles.modalOverlay}>
+                    <div style={styles.modal}>
+                        <h2 style={styles.modalTitle}>Notă de plată</h2>
+                        <div style={styles.modalTable}>Masa {payingOrder.table_number}</div>
+
+                        {payingOrder.items
+                            .filter(i => i.status !== 'rejected')
+                            .map(item => (
+                                <div key={item.id} style={styles.modalItem}>
+                                    <span>{item.quantity}x {item.product.name}</span>
+                                    <span>{(item.quantity * item.unit_price).toFixed(2)} lei</span>
+                                </div>
+                            ))
+                        }
+
+                        <div style={styles.modalDivider} />
+
+                        <div style={styles.modalTotal}>
+                            <span>Total consumație:</span>
+                            <span>{payingOrder.total} lei</span>
+                        </div>
+
+                        <div style={styles.modalRow}>
+                            <span>Bacșiș:</span>
+                            <input
+                                type="number"
+                                min="0"
+                                style={styles.tipInput}
+                                value={tip}
+                                onChange={e => setTip(e.target.value)}
+                                placeholder="0"
+                            />
+                            <span>lei</span>
+                        </div>
+
+                        <div style={styles.modalTotal}>
+                            <span>Total de plată:</span>
+                            <span>{(parseFloat(payingOrder.total) + (parseFloat(tip) || 0)).toFixed(2)} lei</span>
+                        </div>
+
+                        <div style={styles.methodRow}>
+                            {['cash', 'card', 'ticket'].map(m => (
+                                <button
+                                    key={m}
+                                    style={{
+                                        ...styles.methodBtn,
+                                        ...(paymentMethod === m ? styles.methodBtnActive : {})
+                                    }}
+                                    onClick={() => setPaymentMethod(m)}
+                                >
+                                    {m === 'cash' ? '💵 Numerar' : m === 'card' ? '💳 Card' : '🎟️ Tichet'}
+                                </button>
+                            ))}
+                        </div>
+
+                        <button
+                            style={styles.confirmBtn}
+                            onClick={() => processPayment(payingOrder)}
+                        >
+                            Confirmă plata
+                        </button>
+                        <button
+                            style={styles.cancelBtn}
+                            onClick={() => setPayingOrder(null)}
+                        >
+                            Anulează
+                        </button>
+                    </div>
+                </div>
             )}
         </div>
     )
@@ -225,5 +354,20 @@ const styles = {
     itemRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid #f1f5f9' },
     statusPill: { color: 'white', fontSize: 12, padding: '3px 10px', borderRadius: 12 },
     orderTotal: { fontWeight: 'bold', marginTop: 10, fontSize: 16, textAlign: 'right' },
-    empty: { textAlign: 'center', color: '#94a3b8', marginTop: 40, fontSize: 16 }
+    empty: { textAlign: 'center', color: '#94a3b8', marginTop: 40, fontSize: 16 },
+    payBtn: { width: '100%', marginTop: 8, padding: '10px 0', background: '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontSize: 15, cursor: 'pointer' },
+    modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
+    modal: { background: '#fff', borderRadius: 16, padding: 24, width: '90%', maxWidth: 400 },
+    modalTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 4, color: '#1e293b' },
+    modalTable: { color: '#2563eb', fontWeight: '600', marginBottom: 16 },
+    modalItem: { display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 14 },
+    modalDivider: { borderTop: '1px solid #e2e8f0', margin: '12px 0' },
+    modalTotal: { display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: 16, marginBottom: 12 },
+    modalRow: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 },
+    tipInput: { width: 70, padding: '6px 10px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 16 },
+    methodRow: { display: 'flex', gap: 8, marginBottom: 16 },
+    methodBtn: { flex: 1, padding: '8px 0', borderRadius: 8, border: '2px solid #e2e8f0', background: '#f8fafc', cursor: 'pointer', fontSize: 13 },
+    methodBtnActive: { border: '2px solid #2563eb', background: '#eff6ff', color: '#2563eb', fontWeight: '600' },
+    confirmBtn: { width: '100%', padding: '12px 0', background: '#16a34a', color: 'white', border: 'none', borderRadius: 10, fontSize: 16, cursor: 'pointer', marginBottom: 8 },
+    cancelBtn: { width: '100%', padding: '10px 0', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: 10, fontSize: 15, cursor: 'pointer' },
 }
