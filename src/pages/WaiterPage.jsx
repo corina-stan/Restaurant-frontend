@@ -49,6 +49,22 @@ export default function WaiterPage() {
             if (data.type === 'new_order') {
                 loadOrders(token)
             }
+            if (data.type === 'product_availability') {
+                if (!data.is_available) {
+                    setOrders(prev => prev.map(order => ({
+                        ...order,
+                        items: order.items.map(item =>
+                            item.product.id === data.product_id
+                                ? {
+                                    ...item,
+                                    status: 'rejected',
+                                    rejection_reason: 'Produs indisponibil'
+                                }
+                                : item
+                        )
+                    })))
+                }
+            }
         }
     )
 

@@ -44,6 +44,7 @@ export default function ClientPage() {
     useWebSocket(
         `ws://localhost:5173/ws/table/${tableNumber}/`,
         (data) => {
+            console.log('WebSocket mesaj tip:', data.type, data)
             if (data.type === 'order_update') {
                 setOrder(prev => {
                     if (!prev) return prev
@@ -56,6 +57,13 @@ export default function ClientPage() {
                         )
                     }
                 })
+            }
+            if (data.type === 'product_availability') {
+                setMenu(prev => prev.map(p =>
+                    p.id === data.product_id
+                        ? { ...p, is_available: data.is_available }
+                        : p
+                ))
             }
         }
     )
@@ -123,7 +131,7 @@ export default function ClientPage() {
                                 {dept === 'kitchen' ? '🍳 Bucătărie' : '🍹 Bar'}
                             </h3>
                             {menu
-                                .filter(p => p.category.department === dept)
+                                .filter(p => p.category.department === dept && p.is_available)
                                 .map(product => (
                                     <div key={product.id} style={styles.productCard}>
                                         <div>

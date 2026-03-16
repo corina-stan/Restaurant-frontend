@@ -28,7 +28,7 @@ api.interceptors.response.use(
             if (!isPublicEndpoint) {
                 localStorage.removeItem('access_token')
                 localStorage.removeItem('refresh_token')
-                window.location.href = '/login'
+                window.location.href = '/waiter'
             }
         }
         return Promise.reject(error)
