@@ -15,16 +15,49 @@ export default function WaiterPage() {
     const [paymentMethod, setPaymentMethod] = useState('cash')
     const [tip, setTip] = useState(0)
     const [paidGroups, setPaidGroups] = useState(new Set())
+    const [username, setUsername] = useState(sessionStorage.getItem('waiter_username') || '')
+
+    useEffect(() => {
+        const savedToken = sessionStorage.getItem('access_token')
+        if (savedToken) {
+            setToken(savedToken)
+            setLoggedIn(true)
+            loadData(savedToken)
+        }
+    }, [])
 
     const login = async () => {
         try {
             const res = await api.post('/token/', credentials)
+            const payload = JSON.parse(atob(res.data.access.split('.')[1]))
+
+            if (payload.role !== 'waiter' && !payload.is_superuser) {
+                alert('Nu ai permisiunea de a accesa interfața ospătar!')
+                return
+            }
+
+            sessionStorage.setItem('access_token', res.data.access)
+            sessionStorage.setItem('refresh_token', res.data.refresh)
+            sessionStorage.setItem('waiter_username', credentials.username)
             setToken(res.data.access)
             setLoggedIn(true)
+            setUsername(credentials.username)
             await loadData(res.data.access)
         } catch (err) {
             alert('Username sau parolă greșite!')
         }
+    }
+
+    const logout = () => {
+        sessionStorage.removeItem('access_token')
+        sessionStorage.removeItem('refresh_token')
+        sessionStorage.removeItem('waiter_username')
+        setToken(null)
+        setLoggedIn(false)
+        setOrders([])
+        setTables([])
+        setNotifications([])
+        setUsername('')
     }
 
     const loadData = async (accessToken) => {
@@ -90,6 +123,13 @@ export default function WaiterPage() {
                     })))
                 }
             }
+            if (data.type === 'item_status_update') {
+                setNotifications(prev => prev.filter(n => n.item_id !== data.item_id))
+                if (token) loadOrders(token)
+            }
+            if (data.type === 'payment_completed') {
+                if (token) loadOrders(token)
+            }
         }
     )
 
@@ -140,7 +180,7 @@ export default function WaiterPage() {
                 { headers: { Authorization: `Bearer ${token}` } }
             )
             setNotifications(prev => prev.filter(n => n.item_id !== itemId))
-            loadOrders(token)
+            await loadOrders(token)
         } catch (err) {
             console.error('Eroare:', err)
         }
@@ -188,15 +228,17 @@ export default function WaiterPage() {
             await api.post('/payments/create/', payload, {
                 headers: { Authorization: `Bearer ${token}` }
             })
+
+            if (payingGroup) {
+                setPaidGroups(prev => new Set([...prev, payingGroup.id]))
+            }
+
             setPayingOrder(null)
             setPayingGroup(null)
             setTip(0)
             setPaymentMethod('cash')
             loadOrders(token)
             alert(`Plată înregistrată! Total: ${(getPaymentTotal() + (parseFloat(tip) || 0)).toFixed(2)} lei`)
-            if (payingGroup) {
-                setPaidGroups(prev => new Set([...prev, payingGroup.id]))
-            }
         } catch (err) {
             console.error('Eroare plată:', err)
             alert('Eroare la înregistrarea plății!')
@@ -251,7 +293,13 @@ export default function WaiterPage() {
 
     return (
         <div style={styles.container}>
-            <h1 style={styles.title}>Ospătar</h1>
+            <div style={styles.header}>
+                <h1 style={{ ...styles.title, marginBottom: 0 }}>Ospătar</h1>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <span style={{ fontSize: 13, color: '#64748b' }}>👤 {username}</span>
+                    <button style={styles.logoutBtn} onClick={logout}>Logout</button>
+                </div>
+            </div>
 
             {notifications.length > 0 && (
                 <div style={styles.notifSection}>
@@ -282,7 +330,6 @@ export default function WaiterPage() {
             <div style={styles.tableGrid}>
                 {tables.map(table => {
                     const status = getTableStatus(table.number)
-                    const order = getTableOrder(table.number)
                     return (
                         <div
                             key={table.id}
@@ -366,7 +413,6 @@ export default function WaiterPage() {
                                             .filter(i => i.status !== 'rejected')
                                             .reduce((s, i) => s + i.quantity * parseFloat(i.unit_price), 0)
                                         const allPaid = unpaidGroups.length === 0
-
                                         return (
                                             <>
                                                 <div style={styles.orderTotal}>
@@ -481,34 +527,24 @@ export default function WaiterPage() {
 
 const styles = {
     loginContainer: { maxWidth: 360, margin: '80px auto', padding: 24, fontFamily: 'sans-serif', textAlign: 'center' },
-    container: { width: '100%', padding: '16px 24px', fontFamily: 'sans-serif', boxSizing: 'border-box' }, title: { fontSize: 28, fontWeight: 'bold', marginBottom: 16, color: '#1e293b' },
+    container: { width: '100%', padding: '16px 24px', fontFamily: 'sans-serif', boxSizing: 'border-box' },
+    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+    title: { fontSize: 28, fontWeight: 'bold', marginBottom: 16, color: '#1e293b' },
     subtitle: { fontSize: 18, fontWeight: '600', marginBottom: 10, color: '#334155' },
     input: { display: 'block', width: '100%', padding: '10px 14px', marginBottom: 12, borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 16, boxSizing: 'border-box' },
     loginBtn: { width: '100%', padding: '12px 0', background: '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontSize: 16, cursor: 'pointer' },
+    logoutBtn: { padding: '6px 14px', background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8, cursor: 'pointer', fontSize: 13 },
     notifSection: { marginBottom: 16 },
     notifCard: { background: '#fefce8', border: '1px solid #fde047', borderRadius: 8, padding: '10px 14px', marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
     notifText: { fontSize: 14, color: '#713f12' },
     notifActions: { display: 'flex', gap: 6 },
     servedBtn: { background: '#16a34a', color: 'white', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12 },
     dismissBtn: { background: '#94a3b8', color: 'white', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 12 },
-    tableGrid: {
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: 12,
-        marginBottom: 16,
-        justifyContent: 'center'
-    },
-    tableCard: {
-        borderRadius: 10,
-        padding: '14px 8px',
-        cursor: 'pointer',
-        transition: 'all .15s',
-        textAlign: 'center',
-        minHeight: 70,
-        width: 140,
-        flexShrink: 0
-    }, tableNumber: { fontWeight: 'bold', fontSize: 18, color: '#1e293b', marginBottom: 6 },
-    tableStatusLabel: { fontSize: 13, color: '#475569' }, detailPanel: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16, marginTop: 8 },
+    tableGrid: { display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16, justifyContent: 'center' },
+    tableCard: { borderRadius: 10, padding: '14px 8px', cursor: 'pointer', transition: 'all .15s', textAlign: 'center', minHeight: 70, width: 140, flexShrink: 0 },
+    tableNumber: { fontWeight: 'bold', fontSize: 18, color: '#1e293b', marginBottom: 6 },
+    tableStatusLabel: { fontSize: 13, color: '#475569' },
+    detailPanel: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16, marginTop: 8 },
     detailHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
     detailTitle: { fontSize: 18, fontWeight: 'bold', color: '#1e293b' },
     closeBtn: { background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#94a3b8' },

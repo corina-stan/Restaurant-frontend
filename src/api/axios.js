@@ -8,7 +8,9 @@ const api = axios.create({
 })
 
 api.interceptors.request.use((config) => {
-    const token = localStorage.getItem('access_token')
+    const token = sessionStorage.getItem('access_token') ||
+        sessionStorage.getItem('kitchen_token') ||
+        sessionStorage.getItem('bar_token')
     if (token) {
         config.headers.Authorization = `Bearer ${token}`
     }
@@ -34,5 +36,26 @@ api.interceptors.response.use(
         return Promise.reject(error)
     }
 )
+
+export const getTokenRole = () => {
+    const token = localStorage.getItem('access_token') ||
+        localStorage.getItem('kitchen_token') ||
+        localStorage.getItem('bar_token')
+    if (!token) return null
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]))
+        return payload.role
+    } catch {
+        return null
+    }
+}
+
+export const decodeToken = (token) => {
+    try {
+        return JSON.parse(atob(token.split('.')[1]))
+    } catch {
+        return null
+    }
+}
 
 export default api

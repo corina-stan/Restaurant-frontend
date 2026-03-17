@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useWebSocket } from '../hooks/useWebSocket'
 import api from '../api/axios'
 
@@ -9,16 +9,11 @@ export default function KitchenPage() {
     const [token, setToken] = useState(null)
     const seenIds = useRef(new Set())
 
-    const login = async () => {
+    const loadKitchenOrders = async (accessToken) => {
         try {
-            const res = await api.post('/token/', credentials)
-            setToken(res.data.access)
-            setLoggedIn(true)
-
             const ordersRes = await api.get('/orders/', {
-                headers: { Authorization: `Bearer ${res.data.access}` }
+                headers: { Authorization: `Bearer ${accessToken}` }
             })
-
             const kitchenOrders = {}
             ordersRes.data.forEach(order => {
                 order.items.forEach(item => {
@@ -48,8 +43,45 @@ export default function KitchenPage() {
             })
             setOrders(kitchenOrders)
         } catch (err) {
+            localStorage.removeItem('kitchen_token')
+            setLoggedIn(false)
+        }
+    }
+
+    useEffect(() => {
+        const savedToken = sessionStorage.getItem('kitchen_token')
+        if (savedToken) {
+            setToken(savedToken)
+            setLoggedIn(true)
+            loadKitchenOrders(savedToken)
+        }
+    }, [])
+
+    const login = async () => {
+        try {
+            const res = await api.post('/token/', credentials)
+            const payload = JSON.parse(atob(res.data.access.split('.')[1]))
+
+            if (payload.role !== 'kitchen' && !payload.is_superuser) {
+                alert('Nu ai permisiunea de a accesa bucătăria!')
+                return
+            }
+
+            sessionStorage.setItem('kitchen_token', res.data.access)
+            setToken(res.data.access)
+            setLoggedIn(true)
+            await loadKitchenOrders(res.data.access)
+        } catch (err) {
             alert('Username sau parolă greșite!')
         }
+    }
+
+    const logout = () => {
+        sessionStorage.removeItem('kitchen_token')
+        setToken(null)
+        setLoggedIn(false)
+        setOrders({})
+        seenIds.current = new Set()
     }
 
     useWebSocket(
@@ -149,7 +181,10 @@ export default function KitchenPage() {
 
     return (
         <div style={styles.container}>
-            <h1 style={styles.title}>Bucătărie</h1>
+            <div style={styles.header}>
+                <h1 style={styles.title}>Bucătărie</h1>
+                <button style={styles.logoutBtn} onClick={logout}>Logout</button>
+            </div>
             {orderList.length === 0 ? (
                 <div style={styles.empty}>Nicio comandă în așteptare</div>
             ) : (
@@ -189,7 +224,9 @@ export default function KitchenPage() {
 const styles = {
     loginContainer: { maxWidth: 360, margin: '80px auto', padding: 24, fontFamily: 'sans-serif', textAlign: 'center' },
     container: { maxWidth: 600, margin: '0 auto', padding: 16, fontFamily: 'sans-serif' },
-    title: { fontSize: 28, fontWeight: 'bold', marginBottom: 16, color: '#1e293b' },
+    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+    title: { fontSize: 28, fontWeight: 'bold', marginBottom: 0, color: '#1e293b' },
+    logoutBtn: { padding: '6px 14px', background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8, cursor: 'pointer', fontSize: 13 },
     empty: { textAlign: 'center', color: '#94a3b8', marginTop: 60, fontSize: 18 },
     card: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16, marginBottom: 12 },
     cardHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: 12 },

@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useWebSocket } from '../hooks/useWebSocket'
 import api from '../api/axios'
 
@@ -9,16 +9,11 @@ export default function BarPage() {
     const [token, setToken] = useState(null)
     const seenIds = useRef(new Set())
 
-    const login = async () => {
+    const loadBarOrders = async (accessToken) => {
         try {
-            const res = await api.post('/token/', credentials)
-            setToken(res.data.access)
-            setLoggedIn(true)
-
             const ordersRes = await api.get('/orders/', {
-                headers: { Authorization: `Bearer ${res.data.access}` }
+                headers: { Authorization: `Bearer ${accessToken}` }
             })
-
             const barItems = []
             ordersRes.data.forEach(order => {
                 order.items.forEach(item => {
@@ -43,8 +38,45 @@ export default function BarPage() {
             })
             setItems(barItems)
         } catch (err) {
+            localStorage.removeItem('bar_token')
+            setLoggedIn(false)
+        }
+    }
+
+    useEffect(() => {
+        const savedToken = sessionStorage.getItem('bar_token')
+        if (savedToken) {
+            setToken(savedToken)
+            setLoggedIn(true)
+            loadBarOrders(savedToken)
+        }
+    }, [])
+
+    const login = async () => {
+        try {
+            const res = await api.post('/token/', credentials)
+            const payload = JSON.parse(atob(res.data.access.split('.')[1]))
+
+            if (payload.role !== 'barman' && !payload.is_superuser) {
+                alert('Nu ai permisiunea de a accesa barul!')
+                return
+            }
+
+            sessionStorage.setItem('bar_token', res.data.access)
+            setToken(res.data.access)
+            setLoggedIn(true)
+            await loadBarOrders(res.data.access)
+        } catch (err) {
             alert('Username sau parolă greșite!')
         }
+    }
+
+    const logout = () => {
+        sessionStorage.removeItem('bar_token')
+        setToken(null)
+        setLoggedIn(false)
+        setItems([])
+        seenIds.current = new Set()
     }
 
     useWebSocket(
@@ -75,7 +107,6 @@ export default function BarPage() {
     }
 
     const markUnavailable = async (item) => {
-        console.log('item:', item)
         try {
             await api.patch(
                 `/menu/products/${item.product_id}/toggle_availability/`,
@@ -113,7 +144,10 @@ export default function BarPage() {
 
     return (
         <div style={styles.container}>
-            <h1 style={styles.title}>Bar</h1>
+            <div style={styles.header}>
+                <h1 style={styles.title}>Bar</h1>
+                <button style={styles.logoutBtn} onClick={logout}>Logout</button>
+            </div>
             {items.length === 0 ? (
                 <div style={styles.empty}>Nicio băutură în așteptare</div>
             ) : (
@@ -155,7 +189,9 @@ export default function BarPage() {
 const styles = {
     loginContainer: { maxWidth: 360, margin: '80px auto', padding: 24, fontFamily: 'sans-serif', textAlign: 'center' },
     container: { maxWidth: 600, margin: '0 auto', padding: 16, fontFamily: 'sans-serif' },
-    title: { fontSize: 28, fontWeight: 'bold', marginBottom: 16, color: '#1e293b' },
+    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+    title: { fontSize: 28, fontWeight: 'bold', marginBottom: 0, color: '#1e293b' },
+    logoutBtn: { padding: '6px 14px', background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8, cursor: 'pointer', fontSize: 13 },
     empty: { textAlign: 'center', color: '#94a3b8', marginTop: 60, fontSize: 18 },
     card: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16, marginBottom: 12 },
     cardHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: 8 },
