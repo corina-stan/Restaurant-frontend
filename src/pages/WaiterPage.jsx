@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useWebSocket } from '../hooks/useWebSocket'
 import api from '../api/axios'
+import '../DesktopLayout.css'
 
 export default function WaiterPage() {
     const [tables, setTables] = useState([])
@@ -124,7 +125,9 @@ export default function WaiterPage() {
                 }
             }
             if (data.type === 'item_status_update') {
-                setNotifications(prev => prev.filter(n => n.item_id !== data.item_id))
+                if (data.status === 'served' || data.status === 'rejected') {
+                    setNotifications(prev => prev.filter(n => n.item_id !== data.item_id))
+                }
                 if (token) loadOrders(token)
             }
             if (data.type === 'payment_completed') {
@@ -271,53 +274,55 @@ export default function WaiterPage() {
 
     if (!loggedIn) {
         return (
-            <div style={styles.loginContainer}>
-                <h1 style={styles.title}>Ospătar</h1>
-                <input
-                    style={styles.input}
-                    placeholder="Username"
-                    value={credentials.username}
-                    onChange={e => setCredentials(p => ({ ...p, username: e.target.value }))}
-                />
-                <input
-                    style={styles.input}
-                    type="password"
-                    placeholder="Parolă"
-                    value={credentials.password}
-                    onChange={e => setCredentials(p => ({ ...p, password: e.target.value }))}
-                />
-                <button style={styles.loginBtn} onClick={login}>Intră</button>
+            <div className="login-screen">
+                <div className="login-box">
+                    <h1 className="page-title" style={{ marginBottom: '24px' }}>Ospătar</h1>
+                    <input
+                        className="login-input"
+                        placeholder="Username"
+                        value={credentials.username}
+                        onChange={e => setCredentials(p => ({ ...p, username: e.target.value }))}
+                    />
+                    <input
+                        className="login-input"
+                        type="password"
+                        placeholder="Parolă"
+                        value={credentials.password}
+                        onChange={e => setCredentials(p => ({ ...p, password: e.target.value }))}
+                    />
+                    <button className="login-btn" onClick={login}>Intră</button>
+                </div>
             </div>
         )
     }
 
     return (
-        <div style={styles.container}>
-            <div style={styles.header}>
-                <h1 style={{ ...styles.title, marginBottom: 0 }}>Ospătar</h1>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <span style={{ fontSize: 13, color: '#64748b' }}>👤 {username}</span>
-                    <button style={styles.logoutBtn} onClick={logout}>Logout</button>
+        <div className="page-container">
+            <div className="page-header">
+                <h1 className="page-title" style={{ marginBottom: 0 }}>Ospătar</h1>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                    <span style={{ fontSize: 15, color: '#475569', fontWeight: '600' }}>👤 {username}</span>
+                    <button className="logout-btn" onClick={logout}>Logout</button>
                 </div>
             </div>
 
             {notifications.length > 0 && (
-                <div style={styles.notifSection}>
+                <div className="notif-section">
                     {notifications.map((n, idx) => (
-                        <div key={idx} style={styles.notifCard}>
-                            <div style={styles.notifText}>
+                        <div key={idx} className="notif-card">
+                            <div className="notif-text">
                                 {n.type === 'item_ready'
                                     ? `✅ ${n.product_name} — Masa ${n.table_number} e gata!`
                                     : `🔔 Masa ${n.table_number} cere asistență`
                                 }
                             </div>
-                            <div style={styles.notifActions}>
+                            <div style={{ display: 'flex', gap: 8 }}>
                                 {n.type === 'item_ready' && (
-                                    <button style={styles.servedBtn} onClick={() => markServed(n.item_id)}>
+                                    <button className="btn-primary" style={{ padding: '6px 12px' }} onClick={() => markServed(n.item_id)}>
                                         Servit
                                     </button>
                                 )}
-                                <button style={styles.dismissBtn} onClick={() => dismissNotification(idx)}>
+                                <button className="logout-btn" style={{ padding: '6px 12px' }} onClick={() => dismissNotification(idx)}>
                                     ✕
                                 </button>
                             </div>
@@ -326,194 +331,209 @@ export default function WaiterPage() {
                 </div>
             )}
 
-            <h2 style={styles.subtitle}>Mese</h2>
-            <div style={styles.tableGrid}>
-                {tables.map(table => {
-                    const status = getTableStatus(table.number)
-                    return (
-                        <div
-                            key={table.id}
-                            style={{
-                                ...styles.tableCard,
-                                background: getTableStatusColor(status),
-                                border: selectedTable?.id === table.id ? '2px solid #2563eb' : '1px solid #e2e8f0'
-                            }}
-                            onClick={() => setSelectedTable(selectedTable?.id === table.id ? null : table)}
-                        >
-                            <div style={styles.tableNumber}>Masa {table.number}</div>
-                            <div style={styles.tableStatusLabel}>
-                                {getTableStatusLabel(table.number)}
-                            </div>
-                        </div>
-                    )
-                })}
-            </div>
-
-            {selectedTable && (
-                <div style={styles.detailPanel}>
-                    <div style={styles.detailHeader}>
-                        <span style={styles.detailTitle}>Masa {selectedTable.number}</span>
-                        <button style={styles.closeBtn} onClick={() => setSelectedTable(null)}>✕</button>
+            <div className="split-view">
+                <div className="tables-section">
+                    <h2 style={{ fontSize: '24px', color: '#1e293b', marginBottom: '20px', fontWeight: '700' }}>Mese</h2>
+                    <div className="table-grid">
+                        {tables.map(table => {
+                            const status = getTableStatus(table.number)
+                            const isSelected = selectedTable?.id === table.id
+                            return (
+                                <div
+                                    key={table.id}
+                                    className={`table-card ${isSelected ? 'selected' : ''}`}
+                                    style={{ background: getTableStatusColor(status) }}
+                                    onClick={() => setSelectedTable(isSelected ? null : table)}
+                                >
+                                    <div className="number">Masa {table.number}</div>
+                                    <div className="status">
+                                        {getTableStatusLabel(table.number)}
+                                    </div>
+                                </div>
+                            )
+                        })}
                     </div>
+                </div>
 
-                    {!selectedOrder ? (
-                        <div style={styles.freeLabel}>Masă liberă — nicio comandă activă</div>
-                    ) : (
+                <div className="details-panel" style={{ display: selectedTable ? 'block' : 'none' }}>
+                    {selectedTable && (
                         <>
-                            <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 12 }}>
-                                Comandă din {new Date(selectedOrder.created_at).toLocaleTimeString()}
+                            <div className="detail-header">
+                                <span className="detail-title">Masa {selectedTable.number}</span>
+                                <button className="close-btn" onClick={() => setSelectedTable(null)}>✕</button>
                             </div>
 
-                            {selectedOrder.groups && selectedOrder.groups.length > 0 ? (
-                                <>
-                                    {selectedOrder.groups.map(group => {
-                                        const isPaid = paidGroups.has(group.id)
-                                        const groupTotal = group.items
-                                            .filter(i => i.status !== 'rejected')
-                                            .reduce((s, i) => s + i.quantity * parseFloat(i.unit_price), 0)
-                                        return (
-                                            <div key={group.id} style={{ ...styles.groupSection, opacity: isPaid ? 0.6 : 1 }}>
-                                                <div style={styles.groupHeader}>
-                                                    <span style={styles.groupName}>
-                                                        {group.name}
-                                                        {isPaid && <span style={styles.paidBadge}> ✓ Plătit</span>}
-                                                    </span>
-                                                    <span style={styles.groupTotal}>{groupTotal.toFixed(2)} lei</span>
-                                                </div>
-                                                {group.items.map(item => (
-                                                    <div key={item.id} style={styles.itemRow}>
-                                                        <div>
-                                                            <span>{item.quantity}x {item.product.name}</span>
-                                                            {item.notes && (
-                                                                <div style={{ fontSize: 12, color: '#f59e0b', marginTop: 2 }}>
-                                                                    {item.notes}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                        <span style={{ ...styles.statusPill, background: getStatusColor(item.status) }}>
-                                                            {getStatusLabel(item.status)}
-                                                        </span>
-                                                    </div>
-                                                ))}
-                                                {!isPaid && (
-                                                    <button
-                                                        style={styles.groupPayBtn}
-                                                        onClick={() => openPayment(selectedOrder, group)}
-                                                    >
-                                                        Încasează {group.name}
-                                                    </button>
-                                                )}
-                                            </div>
-                                        )
-                                    })}
-                                    {(() => {
-                                        const unpaidGroups = selectedOrder.groups.filter(g => !paidGroups.has(g.id))
-                                        const unpaidTotal = unpaidGroups
-                                            .flatMap(g => g.items)
-                                            .filter(i => i.status !== 'rejected')
-                                            .reduce((s, i) => s + i.quantity * parseFloat(i.unit_price), 0)
-                                        const allPaid = unpaidGroups.length === 0
-                                        return (
-                                            <>
-                                                <div style={styles.orderTotal}>
-                                                    {allPaid
-                                                        ? 'Toate grupurile au plătit ✓'
-                                                        : `Total rămas: ${unpaidTotal.toFixed(2)} lei`
-                                                    }
-                                                </div>
-                                                {!allPaid && (
-                                                    <button style={styles.payBtn} onClick={() => openPayment(selectedOrder, null)}>
-                                                        Încasează tot ({unpaidGroups.length > 1 ? `${unpaidGroups.length} grupuri` : unpaidGroups[0]?.name})
-                                                    </button>
-                                                )}
-                                            </>
-                                        )
-                                    })()}
-                                </>
+                            {!selectedOrder ? (
+                                <div className="empty-state" style={{ border: 'none', padding: '40px 0', margin: 0 }}>Masă liberă — nicio comandă activă</div>
                             ) : (
                                 <>
-                                    {selectedOrder.items.map(item => (
-                                        <div key={item.id} style={styles.itemRow}>
-                                            <div>
-                                                <span>{item.quantity}x {item.product.name}</span>
-                                                {item.notes && (
-                                                    <div style={{ fontSize: 12, color: '#f59e0b', marginTop: 2 }}>
-                                                        {item.notes}
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <span style={{ ...styles.statusPill, background: getStatusColor(item.status) }}>
-                                                {getStatusLabel(item.status)}
-                                            </span>
-                                        </div>
-                                    ))}
-                                    <div style={styles.orderTotal}>
-                                        Total: {selectedOrder.items
-                                            .filter(i => i.status !== 'rejected')
-                                            .reduce((s, i) => s + i.quantity * parseFloat(i.unit_price), 0)
-                                            .toFixed(2)} lei
+                                    <div style={{ fontSize: 14, color: '#64748b', marginBottom: 24, fontWeight: '500' }}>
+                                        Comandă din {new Date(selectedOrder.created_at).toLocaleTimeString()}
                                     </div>
-                                    <button style={styles.payBtn} onClick={() => openPayment(selectedOrder, null)}>
-                                        Încasează
-                                    </button>
+
+                                    {selectedOrder.groups && selectedOrder.groups.length > 0 ? (
+                                        <>
+                                            {selectedOrder.groups.map(group => {
+                                                const isPaid = paidGroups.has(group.id)
+                                                const groupTotal = group.items
+                                                    .filter(i => i.status !== 'rejected')
+                                                    .reduce((s, i) => s + i.quantity * parseFloat(i.unit_price), 0)
+                                                return (
+                                                    <div key={group.id} style={{ marginBottom: 20, paddingBottom: 16, borderBottom: '2px solid #f1f5f9', opacity: isPaid ? 0.6 : 1 }}>
+                                                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                                                            <span style={{ fontWeight: '700', color: '#4f46e5', fontSize: 16 }}>
+                                                                {group.name}
+                                                                {isPaid && <span style={{ color: '#10b981', marginLeft: 8 }}>✓ Plătit</span>}
+                                                            </span>
+                                                            <span style={{ fontWeight: '700', color: '#0f172a', fontSize: 16 }}>{groupTotal.toFixed(2)} lei</span>
+                                                        </div>
+                                                        {group.items.map(item => (
+                                                            <div key={item.id} className="card-item-row">
+                                                                <div>
+                                                                    <span style={{ fontWeight: '600' }}>{item.quantity}x {item.product.name}</span>
+                                                                    {item.notes && (
+                                                                        <div className="item-notes" style={{ display: 'block', marginTop: 4 }}>
+                                                                            {item.notes}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                                <span className="status-pill" style={{ background: getStatusColor(item.status) }}>
+                                                                    {getStatusLabel(item.status)}
+                                                                </span>
+                                                            </div>
+                                                        ))}
+                                                        {!isPaid && (
+                                                            <button
+                                                                className="btn-primary"
+                                                                style={{ width: '100%', marginTop: 12, background: 'linear-gradient(135deg, #8b5cf6, #6d28d9)' }}
+                                                                onClick={() => openPayment(selectedOrder, group)}
+                                                            >
+                                                                Încasează {group.name}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )
+                                            })}
+                                            {(() => {
+                                                const unpaidGroups = selectedOrder.groups.filter(g => !paidGroups.has(g.id))
+                                                const unpaidTotal = unpaidGroups
+                                                    .flatMap(g => g.items)
+                                                    .filter(i => i.status !== 'rejected')
+                                                    .reduce((s, i) => s + i.quantity * parseFloat(i.unit_price), 0)
+                                                const allPaid = unpaidGroups.length === 0
+                                                return (
+                                                    <>
+                                                        <div style={{ fontWeight: '800', marginTop: 24, fontSize: 20, textAlign: 'right', color: '#0f172a' }}>
+                                                            {allPaid
+                                                                ? 'Toate grupurile au plătit ✓'
+                                                                : `Total rămas: ${unpaidTotal.toFixed(2)} lei`
+                                                            }
+                                                        </div>
+                                                        {!allPaid && (
+                                                            <button className="btn-primary" style={{ width: '100%', marginTop: 16, fontSize: 16 }} onClick={() => openPayment(selectedOrder, null)}>
+                                                                Încasează tot ({unpaidGroups.length > 1 ? `${unpaidGroups.length} grupuri` : unpaidGroups[0]?.name})
+                                                            </button>
+                                                        )}
+                                                    </>
+                                                )
+                                            })()}
+                                        </>
+                                    ) : (
+                                        <>
+                                            {selectedOrder.items.map(item => (
+                                                <div key={item.id} className="card-item-row">
+                                                    <div>
+                                                        <span style={{ fontWeight: '600' }}>{item.quantity}x {item.product.name}</span>
+                                                        {item.notes && (
+                                                            <div className="item-notes" style={{ display: 'block', marginTop: 4 }}>
+                                                                {item.notes}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                    <span className="status-pill" style={{ background: getStatusColor(item.status) }}>
+                                                        {getStatusLabel(item.status)}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                            <div style={{ fontWeight: '800', marginTop: 24, fontSize: 20, textAlign: 'right', color: '#0f172a' }}>
+                                                Total: {selectedOrder.items
+                                                    .filter(i => i.status !== 'rejected')
+                                                    .reduce((s, i) => s + i.quantity * parseFloat(i.unit_price), 0)
+                                                    .toFixed(2)} lei
+                                            </div>
+                                            <button className="btn-primary" style={{ width: '100%', marginTop: 16, fontSize: 16 }} onClick={() => openPayment(selectedOrder, null)}>
+                                                Încasează
+                                            </button>
+                                        </>
+                                    )}
                                 </>
                             )}
                         </>
                     )}
                 </div>
-            )}
+            </div>
 
             {payingOrder && (
-                <div style={styles.modalOverlay}>
-                    <div style={styles.modal}>
-                        <h2 style={styles.modalTitle}>Notă de plată</h2>
-                        <div style={styles.modalTable}>
+                <div className="modal-overlay">
+                    <div className="modal-content">
+                        <h2 style={{ fontSize: 24, fontWeight: '800', marginBottom: 8, color: '#0f172a' }}>Notă de plată</h2>
+                        <div style={{ color: '#4f46e5', fontWeight: '700', marginBottom: 24, fontSize: 16 }}>
                             Masa {payingOrder.table_number}
                             {payingGroup && ` — ${payingGroup.name}`}
                         </div>
-                        {getPaymentItems().map(item => (
-                            <div key={item.id} style={styles.modalItem}>
-                                <span>{item.quantity}x {item.product.name}</span>
-                                <span>{(item.quantity * parseFloat(item.unit_price)).toFixed(2)} lei</span>
-                            </div>
-                        ))}
-                        <div style={styles.modalDivider} />
-                        <div style={styles.modalTotal}>
+                        <div style={{ maxHeight: '300px', overflowY: 'auto', marginBottom: 16, paddingRight: 8 }}>
+                            {getPaymentItems().map(item => (
+                                <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', fontSize: 15, borderBottom: '1px solid #f1f5f9' }}>
+                                    <span style={{ fontWeight: '500' }}>{item.quantity}x {item.product.name}</span>
+                                    <span style={{ fontWeight: '600' }}>{(item.quantity * parseFloat(item.unit_price)).toFixed(2)} lei</span>
+                                </div>
+                            ))}
+                        </div>
+                        <div style={{ borderTop: '2px solid #e2e8f0', margin: '16px 0' }} />
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '700', fontSize: 16, marginBottom: 16 }}>
                             <span>Total consumație:</span>
                             <span>{getPaymentTotal().toFixed(2)} lei</span>
                         </div>
-                        <div style={styles.modalRow}>
-                            <span>Bacșiș:</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+                            <span style={{ fontWeight: '600' }}>Bacșiș:</span>
                             <input
                                 type="number"
                                 min="0"
-                                style={styles.tipInput}
+                                style={{ width: 80, padding: '8px 12px', borderRadius: 10, border: '2px solid #cbd5e1', fontSize: 16, outline: 'none' }}
                                 value={tip}
                                 onChange={e => setTip(e.target.value)}
                                 placeholder="0"
                             />
-                            <span>lei</span>
+                            <span style={{ fontWeight: '600' }}>lei</span>
                         </div>
-                        <div style={styles.modalTotal}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '800', fontSize: 20, marginBottom: 24, color: '#0f172a' }}>
                             <span>Total de plată:</span>
-                            <span>{(getPaymentTotal() + (parseFloat(tip) || 0)).toFixed(2)} lei</span>
+                            <span style={{ color: '#10b981' }}>{(getPaymentTotal() + (parseFloat(tip) || 0)).toFixed(2)} lei</span>
                         </div>
-                        <div style={styles.methodRow}>
+                        <div style={{ display: 'flex', gap: 12, marginBottom: 24 }}>
                             {['cash', 'card', 'ticket'].map(m => (
                                 <button
                                     key={m}
-                                    style={{ ...styles.methodBtn, ...(paymentMethod === m ? styles.methodBtnActive : {}) }}
+                                    style={{
+                                        flex: 1, padding: '12px 0', borderRadius: 12,
+                                        border: paymentMethod === m ? '2px solid #4f46e5' : '2px solid #e2e8f0',
+                                        background: paymentMethod === m ? '#e0e7ff' : '#f8fafc',
+                                        color: paymentMethod === m ? '#4f46e5' : '#475569',
+                                        fontWeight: '700', cursor: 'pointer', fontSize: 14,
+                                        transition: 'all 0.2s'
+                                    }}
                                     onClick={() => setPaymentMethod(m)}
                                 >
                                     {m === 'cash' ? '💵 Numerar' : m === 'card' ? '💳 Card' : '🎟️ Tichet'}
                                 </button>
                             ))}
                         </div>
-                        <button style={styles.confirmBtn} onClick={processPayment}>
+                        <button className="btn-primary" style={{ width: '100%', marginBottom: 12, fontSize: 16, padding: '14px 0' }} onClick={processPayment}>
                             Confirmă plata
                         </button>
                         <button
-                            style={styles.cancelBtn}
+                            className="logout-btn"
+                            style={{ width: '100%', fontSize: 16, padding: '14px 0' }}
                             onClick={() => { setPayingOrder(null); setPayingGroup(null) }}
                         >
                             Anulează
@@ -523,55 +543,4 @@ export default function WaiterPage() {
             )}
         </div>
     )
-}
-
-const styles = {
-    loginContainer: { maxWidth: 360, margin: '80px auto', padding: 24, fontFamily: 'sans-serif', textAlign: 'center' },
-    container: { width: '100%', padding: '16px 24px', fontFamily: 'sans-serif', boxSizing: 'border-box' },
-    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-    title: { fontSize: 28, fontWeight: 'bold', marginBottom: 16, color: '#1e293b' },
-    subtitle: { fontSize: 18, fontWeight: '600', marginBottom: 10, color: '#334155' },
-    input: { display: 'block', width: '100%', padding: '10px 14px', marginBottom: 12, borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 16, boxSizing: 'border-box' },
-    loginBtn: { width: '100%', padding: '12px 0', background: '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontSize: 16, cursor: 'pointer' },
-    logoutBtn: { padding: '6px 14px', background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8, cursor: 'pointer', fontSize: 13 },
-    notifSection: { marginBottom: 16 },
-    notifCard: { background: '#fefce8', border: '1px solid #fde047', borderRadius: 8, padding: '10px 14px', marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-    notifText: { fontSize: 14, color: '#713f12' },
-    notifActions: { display: 'flex', gap: 6 },
-    servedBtn: { background: '#16a34a', color: 'white', border: 'none', borderRadius: 6, padding: '4px 10px', cursor: 'pointer', fontSize: 12 },
-    dismissBtn: { background: '#94a3b8', color: 'white', border: 'none', borderRadius: 6, padding: '4px 8px', cursor: 'pointer', fontSize: 12 },
-    tableGrid: { display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 16, justifyContent: 'center' },
-    tableCard: { borderRadius: 10, padding: '14px 8px', cursor: 'pointer', transition: 'all .15s', textAlign: 'center', minHeight: 70, width: 140, flexShrink: 0 },
-    tableNumber: { fontWeight: 'bold', fontSize: 18, color: '#1e293b', marginBottom: 6 },
-    tableStatusLabel: { fontSize: 13, color: '#475569' },
-    detailPanel: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16, marginTop: 8 },
-    detailHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
-    detailTitle: { fontSize: 18, fontWeight: 'bold', color: '#1e293b' },
-    closeBtn: { background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: '#94a3b8' },
-    freeLabel: { textAlign: 'center', color: '#94a3b8', padding: '20px 0', fontSize: 14 },
-    groupSection: { marginBottom: 12, padding: '8px 0', borderBottom: '1px solid #e2e8f0' },
-    groupHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: 6 },
-    groupName: { fontWeight: '600', color: '#7c3aed', fontSize: 14 },
-    groupTotal: { fontWeight: '600', color: '#1e293b', fontSize: 14 },
-    itemRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '5px 0', borderBottom: '1px solid #f1f5f9' },
-    statusPill: { color: 'white', fontSize: 12, padding: '3px 10px', borderRadius: 12, whiteSpace: 'nowrap' },
-    orderTotal: { fontWeight: 'bold', marginTop: 10, fontSize: 16, textAlign: 'right' },
-    empty: { textAlign: 'center', color: '#94a3b8', marginTop: 40, fontSize: 16 },
-    payBtn: { width: '100%', marginTop: 8, padding: '10px 0', background: '#2563eb', color: 'white', border: 'none', borderRadius: 8, fontSize: 15, cursor: 'pointer' },
-    groupPayBtn: { width: '100%', marginTop: 6, padding: '7px 0', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer' },
-    modalOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
-    modal: { background: '#fff', borderRadius: 16, padding: 24, width: '90%', maxWidth: 400 },
-    modalTitle: { fontSize: 22, fontWeight: 'bold', marginBottom: 4, color: '#1e293b' },
-    modalTable: { color: '#2563eb', fontWeight: '600', marginBottom: 16 },
-    modalItem: { display: 'flex', justifyContent: 'space-between', padding: '4px 0', fontSize: 14 },
-    modalDivider: { borderTop: '1px solid #e2e8f0', margin: '12px 0' },
-    modalTotal: { display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: 16, marginBottom: 12 },
-    modalRow: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 },
-    tipInput: { width: 70, padding: '6px 10px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 16 },
-    methodRow: { display: 'flex', gap: 8, marginBottom: 16 },
-    methodBtn: { flex: 1, padding: '8px 0', borderRadius: 8, border: '2px solid #e2e8f0', background: '#f8fafc', cursor: 'pointer', fontSize: 13 },
-    methodBtnActive: { border: '2px solid #2563eb', background: '#eff6ff', color: '#2563eb', fontWeight: '600' },
-    confirmBtn: { width: '100%', padding: '12px 0', background: '#16a34a', color: 'white', border: 'none', borderRadius: 10, fontSize: 16, cursor: 'pointer', marginBottom: 8 },
-    cancelBtn: { width: '100%', padding: '10px 0', background: '#f1f5f9', color: '#64748b', border: 'none', borderRadius: 10, fontSize: 15, cursor: 'pointer' },
-    paidBadge: { color: '#16a34a', fontSize: 12, fontWeight: '600' },
 }

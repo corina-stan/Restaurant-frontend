@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useWebSocket } from '../hooks/useWebSocket'
 import api from '../api/axios'
+import '../DesktopLayout.css'
 
 export default function BarPage() {
     const [items, setItems] = useState([])
@@ -122,86 +123,66 @@ export default function BarPage() {
 
     if (!loggedIn) {
         return (
-            <div style={styles.loginContainer}>
-                <h1 style={styles.title}>Bar</h1>
-                <input
-                    style={styles.input}
-                    placeholder="Username"
-                    value={credentials.username}
-                    onChange={e => setCredentials(p => ({ ...p, username: e.target.value }))}
-                />
-                <input
-                    style={styles.input}
-                    type="password"
-                    placeholder="Parolă"
-                    value={credentials.password}
-                    onChange={e => setCredentials(p => ({ ...p, password: e.target.value }))}
-                />
-                <button style={styles.loginBtn} onClick={login}>Intră</button>
+            <div className="login-screen">
+                <div className="login-box">
+                    <h1 className="page-title" style={{ marginBottom: '24px' }}>Bar</h1>
+                    <input
+                        className="login-input"
+                        placeholder="Username"
+                        value={credentials.username}
+                        onChange={e => setCredentials(p => ({ ...p, username: e.target.value }))}
+                    />
+                    <input
+                        className="login-input"
+                        type="password"
+                        placeholder="Parolă"
+                        value={credentials.password}
+                        onChange={e => setCredentials(p => ({ ...p, password: e.target.value }))}
+                    />
+                    <button className="login-btn" onClick={login}>Intră</button>
+                </div>
             </div>
         )
     }
 
     return (
-        <div style={styles.container}>
-            <div style={styles.header}>
-                <h1 style={styles.title}>Bar</h1>
-                <button style={styles.logoutBtn} onClick={logout}>Logout</button>
+        <div className="page-container">
+            <div className="page-header">
+                <h1 className="page-title">Bar</h1>
+                <button className="logout-btn" onClick={logout}>Logout</button>
             </div>
             {items.length === 0 ? (
-                <div style={styles.empty}>Nicio băutură în așteptare</div>
+                <div className="empty-state">Nicio băutură în așteptare</div>
             ) : (
-                items.map((item, idx) => (
-                    <div key={idx} style={styles.card}>
-                        <div style={styles.cardHeader}>
-                            <span style={styles.table}>Masa {item.table_number}</span>
-                            <span style={styles.time}>
-                                {new Date(item.timestamp).toLocaleTimeString()}
-                            </span>
+                <div className="kanban-board">
+                    {items.map((item, idx) => (
+                        <div key={idx} className="order-card">
+                            <div className="card-header">
+                                <span className="card-table-badge">Masa {item.table_number}</span>
+                                <span className="card-time">
+                                    {new Date(item.timestamp).toLocaleTimeString()}
+                                </span>
+                            </div>
+                            <div className="card-item-row" style={{ borderBottom: 'none', paddingBottom: 0 }}>
+                                <div>
+                                    <div className="item-name">{item.quantity}x {item.product_name}</div>
+                                    {item.notes && (
+                                        <div className="item-notes">Mențiuni: {item.notes}</div>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="btn-row">
+                                <button className="btn-primary" onClick={() => markReady(item)}>
+                                    Gata
+                                </button>
+                                <button className="btn-danger" onClick={() => markUnavailable(item)}>
+                                    Indisponibil
+                                </button>
+                            </div>
                         </div>
-                        <div style={styles.product}>
-                            {item.quantity}x {item.product_name}
-                        </div>
-                        {item.notes && (
-                            <div style={styles.notes}>Mențiuni: {item.notes}</div>
-                        )}
-                        <div style={styles.btnRow}>
-                            <button
-                                style={styles.readyBtn}
-                                onClick={() => markReady(item)}
-                            >
-                                Gata
-                            </button>
-                            <button
-                                style={styles.unavailableBtn}
-                                onClick={() => markUnavailable(item)}
-                            >
-                                Indisponibil
-                            </button>
-                        </div>
-                    </div>
-                ))
+                    ))}
+                </div>
             )}
         </div>
     )
-}
-
-const styles = {
-    loginContainer: { maxWidth: 360, margin: '80px auto', padding: 24, fontFamily: 'sans-serif', textAlign: 'center' },
-    container: { maxWidth: 600, margin: '0 auto', padding: 16, fontFamily: 'sans-serif' },
-    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-    title: { fontSize: 28, fontWeight: 'bold', marginBottom: 0, color: '#1e293b' },
-    logoutBtn: { padding: '6px 14px', background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8, cursor: 'pointer', fontSize: 13 },
-    empty: { textAlign: 'center', color: '#94a3b8', marginTop: 60, fontSize: 18 },
-    card: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16, marginBottom: 12 },
-    cardHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: 8 },
-    table: { fontWeight: 'bold', color: '#7c3aed', fontSize: 16 },
-    time: { color: '#94a3b8', fontSize: 14 },
-    product: { fontSize: 20, fontWeight: '500', marginBottom: 8 },
-    notes: { color: '#f59e0b', fontSize: 14, marginBottom: 8 },
-    btnRow: { display: 'flex', gap: 8 },
-    readyBtn: { flex: 1, background: '#16a34a', color: 'white', border: 'none', borderRadius: 8, padding: '10px 0', fontSize: 15, cursor: 'pointer' },
-    unavailableBtn: { flex: 1, background: '#ef4444', color: 'white', border: 'none', borderRadius: 8, padding: '10px 0', fontSize: 15, cursor: 'pointer' },
-    input: { display: 'block', width: '100%', padding: '10px 14px', marginBottom: 12, borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 16, boxSizing: 'border-box' },
-    loginBtn: { width: '100%', padding: '12px 0', background: '#7c3aed', color: 'white', border: 'none', borderRadius: 8, fontSize: 16, cursor: 'pointer' }
 }

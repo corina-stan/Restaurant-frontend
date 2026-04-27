@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useWebSocket } from '../hooks/useWebSocket'
 import api from '../api/axios'
+import '../DesktopLayout.css'
 
 export default function KitchenPage() {
     const [orders, setOrders] = useState({})
@@ -157,22 +158,24 @@ export default function KitchenPage() {
 
     if (!loggedIn) {
         return (
-            <div style={styles.loginContainer}>
-                <h1 style={styles.title}>Bucătărie</h1>
-                <input
-                    style={styles.input}
-                    placeholder="Username"
-                    value={credentials.username}
-                    onChange={e => setCredentials(p => ({ ...p, username: e.target.value }))}
-                />
-                <input
-                    style={styles.input}
-                    type="password"
-                    placeholder="Parolă"
-                    value={credentials.password}
-                    onChange={e => setCredentials(p => ({ ...p, password: e.target.value }))}
-                />
-                <button style={styles.loginBtn} onClick={login}>Intră</button>
+            <div className="login-screen">
+                <div className="login-box">
+                    <h1 className="page-title" style={{ marginBottom: '24px' }}>Bucătărie</h1>
+                    <input
+                        className="login-input"
+                        placeholder="Username"
+                        value={credentials.username}
+                        onChange={e => setCredentials(p => ({ ...p, username: e.target.value }))}
+                    />
+                    <input
+                        className="login-input"
+                        type="password"
+                        placeholder="Parolă"
+                        value={credentials.password}
+                        onChange={e => setCredentials(p => ({ ...p, password: e.target.value }))}
+                    />
+                    <button className="login-btn" onClick={login}>Intră</button>
+                </div>
             </div>
         )
     }
@@ -180,62 +183,46 @@ export default function KitchenPage() {
     const orderList = Object.values(orders)
 
     return (
-        <div style={styles.container}>
-            <div style={styles.header}>
-                <h1 style={styles.title}>Bucătărie</h1>
-                <button style={styles.logoutBtn} onClick={logout}>Logout</button>
+        <div className="page-container">
+            <div className="page-header">
+                <h1 className="page-title">Bucătărie</h1>
+                <button className="logout-btn" onClick={logout}>Logout</button>
             </div>
             {orderList.length === 0 ? (
-                <div style={styles.empty}>Nicio comandă în așteptare</div>
+                <div className="empty-state">Nicio comandă în așteptare</div>
             ) : (
-                orderList.map(order => (
-                    <div key={order.order_id} style={styles.card}>
-                        <div style={styles.cardHeader}>
-                            <span style={styles.table}>Masa {order.table_number}</span>
-                            <span style={styles.time}>
-                                {new Date(order.timestamp).toLocaleTimeString()}
-                            </span>
-                        </div>
-                        {order.items.map(item => (
-                            <div key={item.item_id} style={styles.itemRow}>
-                                <div style={{ flex: 1 }}>
-                                    <span style={styles.itemName}>
-                                        {item.quantity}x {item.product_name}
-                                    </span>
-                                    {item.notes && (
-                                        <div style={styles.itemNotes}>Mențiuni: {item.notes}</div>
-                                    )}
-                                </div>
-                                <button
-                                    style={styles.readyBtn}
-                                    onClick={() => markReady(item.item_id, order.order_id)}
-                                >
-                                    Gata
-                                </button>
+                <div className="kanban-board">
+                    {orderList.map(order => (
+                        <div key={order.order_id} className="order-card">
+                            <div className="card-header">
+                                <span className="card-table-badge">Masa {order.table_number}</span>
+                                <span className="card-time">
+                                    {new Date(order.timestamp).toLocaleTimeString()}
+                                </span>
                             </div>
-                        ))}
-                    </div>
-                ))
+                            {order.items.map(item => (
+                                <div key={item.item_id} className="card-item-row">
+                                    <div style={{ flex: 1 }}>
+                                        <div className="item-name">
+                                            {item.quantity}x {item.product_name}
+                                        </div>
+                                        {item.notes && (
+                                            <div className="item-notes">Mențiuni: {item.notes}</div>
+                                        )}
+                                    </div>
+                                    <button
+                                        className="btn-primary"
+                                        style={{ marginLeft: '12px' }}
+                                        onClick={() => markReady(item.item_id, order.order_id)}
+                                    >
+                                        Gata
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                    ))}
+                </div>
             )}
         </div>
     )
-}
-
-const styles = {
-    loginContainer: { maxWidth: 360, margin: '80px auto', padding: 24, fontFamily: 'sans-serif', textAlign: 'center' },
-    container: { maxWidth: 600, margin: '0 auto', padding: 16, fontFamily: 'sans-serif' },
-    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-    title: { fontSize: 28, fontWeight: 'bold', marginBottom: 0, color: '#1e293b' },
-    logoutBtn: { padding: '6px 14px', background: '#f1f5f9', color: '#64748b', border: '1px solid #e2e8f0', borderRadius: 8, cursor: 'pointer', fontSize: 13 },
-    empty: { textAlign: 'center', color: '#94a3b8', marginTop: 60, fontSize: 18 },
-    card: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16, marginBottom: 12 },
-    cardHeader: { display: 'flex', justifyContent: 'space-between', marginBottom: 12 },
-    table: { fontWeight: 'bold', color: '#2563eb', fontSize: 16 },
-    time: { color: '#94a3b8', fontSize: 14 },
-    itemRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f1f5f9' },
-    itemName: { fontSize: 16, fontWeight: '500' },
-    itemNotes: { color: '#f59e0b', fontSize: 12, marginTop: 2 },
-    readyBtn: { background: '#16a34a', color: 'white', border: 'none', borderRadius: 8, padding: '6px 16px', fontSize: 14, cursor: 'pointer', marginLeft: 8 },
-    input: { display: 'block', width: '100%', padding: '10px 14px', marginBottom: 12, borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 16, boxSizing: 'border-box' },
-    loginBtn: { width: '100%', padding: '12px 0', background: '#1e293b', color: 'white', border: 'none', borderRadius: 8, fontSize: 16, cursor: 'pointer' }
 }

@@ -8,7 +8,8 @@ const api = axios.create({
 })
 
 api.interceptors.request.use((config) => {
-    const token = sessionStorage.getItem('access_token') ||
+    const token = sessionStorage.getItem('admin_token') ||
+        sessionStorage.getItem('access_token') ||
         sessionStorage.getItem('kitchen_token') ||
         sessionStorage.getItem('bar_token')
     if (token) {
@@ -38,7 +39,11 @@ api.interceptors.response.use(
 )
 
 export const getTokenRole = () => {
-    const token = localStorage.getItem('access_token') ||
+    const token = sessionStorage.getItem('admin_token') ||
+        sessionStorage.getItem('access_token') ||
+        sessionStorage.getItem('kitchen_token') ||
+        sessionStorage.getItem('bar_token') ||
+        localStorage.getItem('access_token') ||
         localStorage.getItem('kitchen_token') ||
         localStorage.getItem('bar_token')
     if (!token) return null

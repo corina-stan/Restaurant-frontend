@@ -200,6 +200,72 @@ export default function ClientPage() {
     const myGroup = order?.groups?.find(g => g.id === groupId)
     const myItems = myGroup ? myGroup.items : []
 
+    const CategoryDropdown = ({ catName, products }) => {
+        const [isOpen, setIsOpen] = useState(false)
+        const [isHovered, setIsHovered] = useState(false)
+
+        return (
+            <div style={{ ...styles.categoryDetails, boxShadow: isHovered ? '0 10px 15px -3px rgba(0,0,0,0.05)' : '0 1px 2px 0 rgba(0,0,0,0.02)', transition: 'all 0.3s ease' }}>
+                <div
+                    style={{ ...styles.categorySummary, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: isHovered ? '#f1f5f9' : '#f8fafc', transition: 'background 0.2s ease' }}
+                    onClick={() => setIsOpen(!isOpen)}
+                    onMouseEnter={() => setIsHovered(true)}
+                    onMouseLeave={() => setIsHovered(false)}
+                >
+                    <span style={{ letterSpacing: '-0.3px' }}>{catName}</span>
+                    <div style={{
+                        transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        color: isOpen ? '#4f46e5' : '#94a3b8'
+                    }}>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </div>
+                </div>
+                {isOpen && (
+                    <div style={{ ...styles.categoryContent, borderTop: '1px solid #f1f5f9', paddingTop: '8px' }}>
+                        {products.map(product => (
+                            <div key={product.id} style={styles.productCard}>
+                                <div style={{ flex: 1, paddingRight: '16px' }}>
+                                    <div style={styles.productName}>{product.name}</div>
+                                </div>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                    <div style={styles.productPrice}>{product.price} lei</div>
+                                    <button style={styles.addBtn} onClick={() => addToCart(product)}>
+                                        + Adaugă
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+        )
+    }
+
+    const renderMenu = () => {
+        const availableProducts = menu.filter(p => p.is_available)
+        if (availableProducts.length === 0) return null
+
+        const grouped = {}
+        availableProducts.forEach(p => {
+            const catName = p.category.name
+            if (!grouped[catName]) grouped[catName] = []
+            grouped[catName].push(p)
+        })
+
+        return (
+            <div>
+                {Object.entries(grouped).map(([catName, products]) => (
+                    <CategoryDropdown key={catName} catName={catName} products={products} />
+                ))}
+            </div>
+        )
+    }
+
     if (!groupName) {
         return (
             <div style={styles.container}>
@@ -262,26 +328,7 @@ export default function ClientPage() {
             {!order && !showAddMenu && (
                 <>
                     <h2 style={styles.subtitle}>Meniu</h2>
-                    {['kitchen', 'bar'].map(dept => (
-                        <div key={dept}>
-                            <h3 style={styles.deptTitle}>
-                                {dept === 'kitchen' ? '🍳 Bucătărie' : '🍹 Bar'}
-                            </h3>
-                            {menu
-                                .filter(p => p.category.department === dept && p.is_available)
-                                .map(product => (
-                                    <div key={product.id} style={styles.productCard}>
-                                        <div>
-                                            <div style={styles.productName}>{product.name}</div>
-                                            <div style={styles.productPrice}>{product.price} lei</div>
-                                        </div>
-                                        <button style={styles.addBtn} onClick={() => addToCart(product)}>
-                                            + Adaugă
-                                        </button>
-                                    </div>
-                                ))}
-                        </div>
-                    ))}
+                    {renderMenu()}
                     {cart.length > 0 && (
                         <div style={styles.cart}>
                             <h2 style={styles.subtitle}>Coș</h2>
@@ -316,26 +363,7 @@ export default function ClientPage() {
             {showAddMenu && (
                 <>
                     <h2 style={styles.subtitle}>Adaugă la comandă</h2>
-                    {['kitchen', 'bar'].map(dept => (
-                        <div key={dept}>
-                            <h3 style={styles.deptTitle}>
-                                {dept === 'kitchen' ? '🍳 Bucătărie' : '🍹 Bar'}
-                            </h3>
-                            {menu
-                                .filter(p => p.category.department === dept && p.is_available)
-                                .map(product => (
-                                    <div key={product.id} style={styles.productCard}>
-                                        <div>
-                                            <div style={styles.productName}>{product.name}</div>
-                                            <div style={styles.productPrice}>{product.price} lei</div>
-                                        </div>
-                                        <button style={styles.addBtn} onClick={() => addToCart(product)}>
-                                            + Adaugă
-                                        </button>
-                                    </div>
-                                ))}
-                        </div>
-                    ))}
+                    {renderMenu()}
                     {cart.length > 0 && (
                         <div style={styles.cart}>
                             <h2 style={styles.subtitle}>Coș</h2>
@@ -417,11 +445,13 @@ const styles = {
     center: { display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' },
     title: { fontSize: 24, fontWeight: 'bold', marginBottom: 8, textAlign: 'center' },
     subtitle: { fontSize: 20, fontWeight: 'bold', marginTop: 16, marginBottom: 8 },
-    deptTitle: { fontSize: 16, color: '#666', marginTop: 12 },
-    productCard: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #eee' },
-    productName: { fontWeight: '500' },
-    productPrice: { color: '#888', fontSize: 14 },
-    addBtn: { background: '#2563eb', color: 'white', border: 'none', borderRadius: 8, padding: '6px 14px', cursor: 'pointer' },
+    categoryDetails: { marginBottom: 12, background: '#ffffff', borderRadius: 8, border: '1px solid #e2e8f0', overflow: 'hidden' },
+    categorySummary: { padding: '14px 16px', fontSize: 16, fontWeight: '600', color: '#1e293b', cursor: 'pointer', userSelect: 'none', background: '#f8fafc' },
+    categoryContent: { padding: '0 16px 8px 16px' },
+    productCard: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderBottom: '1px dashed #e2e8f0' },
+    productName: { fontWeight: '600', fontSize: '15px', color: '#1e293b' },
+    productPrice: { color: '#64748b', fontSize: '15px', fontWeight: '600', whiteSpace: 'nowrap' },
+    addBtn: { background: '#eef2ff', color: '#4f46e5', fontWeight: '600', border: 'none', borderRadius: '20px', padding: '6px 16px', cursor: 'pointer', transition: 'background 0.2s' },
     removeBtn: { background: '#ef4444', color: 'white', border: 'none', borderRadius: 8, padding: '4px 8px', cursor: 'pointer' },
     cart: { marginTop: 24, background: '#f9fafb', borderRadius: 12, padding: 16 },
     cartItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '6px 0' },
