@@ -2,6 +2,14 @@ import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { useWebSocket } from '../hooks/useWebSocket'
 import api from '../api/axios'
+import '../ClientLayout.css'
+
+const pizzaImg = '/external-images/pizza_img_1777787996916.png'
+const pastaImg = '/external-images/pasta_img_1777788014420.png'
+const dessertImg = '/external-images/dessert_img_1777788035243.png'
+const drinkImg = '/external-images/drink_img_1777788049845.png'
+const soupImg = '/external-images/soup_img_1777788115660.png'
+const coffeeImg = '/external-images/coffee_img_1777788128533.png'
 
 export default function ClientPage() {
     const { tableNumber } = useParams()
@@ -67,8 +75,6 @@ export default function ClientPage() {
         }
         initSession()
     }, [tableNumber, groupName])
-
-
 
     useWebSocket(
         `ws://localhost:5173/ws/table/${tableNumber}/`,
@@ -200,14 +206,24 @@ export default function ClientPage() {
     const myGroup = order?.groups?.find(g => g.id === groupId)
     const myItems = myGroup ? myGroup.items : []
 
+    const getProductImage = (catName) => {
+        const lower = catName.toLowerCase();
+        if (lower.includes('paste')) return pastaImg;
+        if (lower.includes('desert')) return dessertImg;
+        if (lower.includes('ciorbe')) return soupImg;
+        if (lower.includes('cafea')) return coffeeImg;
+        if (lower.includes('cocktails') || lower.includes('racoritoare') || lower.includes('bere')) return drinkImg;
+        return pizzaImg;
+    }
+
     const CategoryDropdown = ({ catName, products }) => {
         const [isOpen, setIsOpen] = useState(false)
         const [isHovered, setIsHovered] = useState(false)
 
         return (
-            <div style={{ ...styles.categoryDetails, boxShadow: isHovered ? '0 10px 15px -3px rgba(0,0,0,0.05)' : '0 1px 2px 0 rgba(0,0,0,0.02)', transition: 'all 0.3s ease' }}>
+            <div className={`category-wrapper ${isHovered ? 'hovered' : ''}`}>
                 <div
-                    style={{ ...styles.categorySummary, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: isHovered ? '#f1f5f9' : '#f8fafc', transition: 'background 0.2s ease' }}
+                    className="category-header"
                     onClick={() => setIsOpen(!isOpen)}
                     onMouseEnter={() => setIsHovered(true)}
                     onMouseLeave={() => setIsHovered(false)}
@@ -218,7 +234,7 @@ export default function ClientPage() {
                         transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                         display: 'flex',
                         alignItems: 'center',
-                        color: isOpen ? '#4f46e5' : '#94a3b8'
+                        color: isOpen ? 'var(--primary)' : 'var(--text-muted)'
                     }}>
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                             <polyline points="6 9 12 15 18 9"></polyline>
@@ -226,15 +242,20 @@ export default function ClientPage() {
                     </div>
                 </div>
                 {isOpen && (
-                    <div style={{ ...styles.categoryContent, borderTop: '1px solid #f1f5f9', paddingTop: '8px' }}>
+                    <div className="category-content">
                         {products.map(product => (
-                            <div key={product.id} style={styles.productCard}>
-                                <div style={{ flex: 1, paddingRight: '16px' }}>
-                                    <div style={styles.productName}>{product.name}</div>
+                            <div key={product.id} className="product-card">
+                                <div style={{ display: 'flex', alignItems: 'center', flex: 1, paddingRight: '16px' }}>
+                                    <img 
+                                        src={getProductImage(catName)} 
+                                        alt={product.name} 
+                                        style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '12px', marginRight: '16px', flexShrink: 0 }}
+                                    />
+                                    <div className="product-name" style={{ marginBottom: 0 }}>{product.name}</div>
                                 </div>
-                                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                                    <div style={styles.productPrice}>{product.price} lei</div>
-                                    <button style={styles.addBtn} onClick={() => addToCart(product)}>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px', flexShrink: 0 }}>
+                                    <div className="product-price">{product.price} lei</div>
+                                    <button className="add-btn" onClick={() => addToCart(product)}>
                                         + Adaugă
                                     </button>
                                 </div>
@@ -268,23 +289,23 @@ export default function ClientPage() {
 
     if (!groupName) {
         return (
-            <div style={styles.container}>
-                <h1 style={styles.title}>Masa {tableNumber}</h1>
-                <div style={styles.groupCard}>
-                    <h2 style={styles.subtitle}>Cum vă numiți?</h2>
-                    <p style={{ color: '#94a3b8', fontSize: 14, marginBottom: 16 }}>
+            <div className="client-container">
+                <h1 className="client-title">Masa {tableNumber}</h1>
+                <div className="client-group-card">
+                    <h2 className="client-subtitle" style={{marginTop: 0}}>Cum vă numiți?</h2>
+                    <p style={{ color: 'var(--text-muted)', fontSize: 15, marginBottom: 24 }}>
                         Introduceți un nume nou sau alăturați-vă unui grup existent.
                     </p>
 
                     {existingGroups.length > 0 && (
-                        <div style={{ marginBottom: 16 }}>
-                            <div style={{ fontSize: 13, color: '#64748b', marginBottom: 8, fontWeight: '500' }}>
+                        <div style={{ marginBottom: 24 }}>
+                            <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 12, fontWeight: '600' }}>
                                 Grupuri existente la această masă:
                             </div>
                             {existingGroups.map(group => (
                                 <button
                                     key={group.id}
-                                    style={styles.existingGroupBtn}
+                                    className="client-existing-group-btn"
                                     onClick={() => {
                                         setGroupName(group.name)
                                         setGroupId(group.id)
@@ -293,21 +314,21 @@ export default function ClientPage() {
                                     {group.name}
                                 </button>
                             ))}
-                            <div style={{ fontSize: 12, color: '#94a3b8', margin: '12px 0 8px' }}>
+                            <div style={{ fontSize: 13, color: 'var(--text-muted)', margin: '16px 0 12px', textAlign: 'center', fontWeight: '500' }}>
                                 — sau creați un grup nou —
                             </div>
                         </div>
                     )}
 
                     <input
-                        style={styles.groupInput}
+                        className="client-group-input"
                         placeholder="Numele grupului nou..."
                         value={groupInput}
                         onChange={e => setGroupInput(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && groupInput.trim() && setGroupName(groupInput.trim())}
                     />
                     <button
-                        style={{ ...styles.orderBtn, marginTop: 12 }}
+                        className="client-btn-primary"
                         onClick={() => groupInput.trim() && setGroupName(groupInput.trim())}
                     >
                         Continuă
@@ -316,43 +337,45 @@ export default function ClientPage() {
             </div>
         )
     }
-    if (loading) return <div style={styles.center}>Se încarcă...</div>
+    if (loading) return <div className="client-center">Se încarcă...</div>
 
     return (
-        <div style={styles.container}>
-            <h1 style={styles.title}>Masa {tableNumber}</h1>
-            <div style={{ textAlign: 'center', marginBottom: 8 }}>
-                <span style={styles.groupBadge}>Grupul: {groupName}</span>
+        <div className="client-container">
+            <h1 className="client-title">Masa {tableNumber}</h1>
+            <div style={{ textAlign: 'center', marginBottom: 16 }}>
+                <span className="client-group-badge">Grupul: {groupName}</span>
             </div>
 
             {!order && !showAddMenu && (
                 <>
-                    <h2 style={styles.subtitle}>Meniu</h2>
+                    <h2 className="client-subtitle">Meniu</h2>
                     {renderMenu()}
                     {cart.length > 0 && (
-                        <div style={styles.cart}>
-                            <h2 style={styles.subtitle}>Coș</h2>
+                        <div className="cart-section">
+                            <h2 className="client-subtitle" style={{marginTop: 0}}>Coș</h2>
                             {cart.map(item => (
-                                <div key={item.cartId} style={styles.cartItem}>
+                                <div key={item.cartId} className="cart-item">
                                     <div style={{ flex: 1 }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                                        <div className="cart-item-header">
                                             <span>{item.quantity}x {item.product.name}</span>
-                                            <span>{(item.quantity * item.product.price).toFixed(2)} lei</span>
-                                            <button style={styles.removeBtn} onClick={() => removeFromCart(item.cartId)}>✕</button>
+                                            <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
+                                                <span style={{color: 'var(--primary)', fontWeight: '800'}}>{(item.quantity * item.product.price).toFixed(2)} lei</span>
+                                                <button className="remove-btn" onClick={() => removeFromCart(item.cartId)}>✕</button>
+                                            </div>
                                         </div>
                                         <input
-                                            style={styles.itemNotes}
-                                            placeholder="Mențiuni..."
+                                            className="cart-item-notes"
+                                            placeholder="Mențiuni speciale..."
                                             value={item.notes || ''}
                                             onChange={e => updateNotes(item.cartId, e.target.value)}
                                         />
                                     </div>
                                 </div>
                             ))}
-                            <div style={styles.cartTotal}>
+                            <div className="cart-total">
                                 Total: {cart.reduce((s, i) => s + i.quantity * i.product.price, 0).toFixed(2)} lei
                             </div>
-                            <button style={styles.orderBtn} onClick={placeOrder}>
+                            <button className="client-btn-primary" onClick={placeOrder}>
                                 Trimite comanda
                             </button>
                         </div>
@@ -362,107 +385,86 @@ export default function ClientPage() {
 
             {showAddMenu && (
                 <>
-                    <h2 style={styles.subtitle}>Adaugă la comandă</h2>
+                    <h2 className="client-subtitle">Adaugă la comandă</h2>
                     {renderMenu()}
                     {cart.length > 0 && (
-                        <div style={styles.cart}>
-                            <h2 style={styles.subtitle}>Coș</h2>
+                        <div className="cart-section">
+                            <h2 className="client-subtitle" style={{marginTop: 0}}>Coș suplimentar</h2>
                             {cart.map(item => (
-                                <div key={item.cartId} style={styles.cartItem}>
+                                <div key={item.cartId} className="cart-item">
                                     <div style={{ flex: 1 }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                                        <div className="cart-item-header">
                                             <span>{item.quantity}x {item.product.name}</span>
-                                            <span>{(item.quantity * item.product.price).toFixed(2)} lei</span>
-                                            <button style={styles.removeBtn} onClick={() => removeFromCart(item.cartId)}>✕</button>
+                                            <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
+                                                <span style={{color: 'var(--primary)', fontWeight: '800'}}>{(item.quantity * item.product.price).toFixed(2)} lei</span>
+                                                <button className="remove-btn" onClick={() => removeFromCart(item.cartId)}>✕</button>
+                                            </div>
                                         </div>
                                         <input
-                                            style={styles.itemNotes}
-                                            placeholder="Mențiuni..."
+                                            className="cart-item-notes"
+                                            placeholder="Mențiuni speciale..."
                                             value={item.notes || ''}
                                             onChange={e => updateNotes(item.cartId, e.target.value)}
                                         />
                                     </div>
                                 </div>
                             ))}
-                            <button style={styles.orderBtn} onClick={placeOrder}>
+                            <button className="client-btn-primary" onClick={placeOrder}>
                                 Adaugă la comanda #{order?.id}
                             </button>
                         </div>
                     )}
                     <button
-                        style={{ ...styles.orderBtn, background: '#94a3b8', marginTop: 8 }}
+                        className="client-btn-secondary"
                         onClick={() => { setShowAddMenu(false); setCart([]) }}
                     >
-                        Anulează
+                        Anulează adăugarea
                     </button>
                 </>
             )}
 
             {order && !showAddMenu && (
-                <div style={styles.orderStatus}>
-                    <h2 style={styles.subtitle}>Comanda ta — {groupName}</h2>
+                <div className="order-status-section">
+                    <h2 className="client-subtitle">Comanda ta — {groupName}</h2>
                     {myItems.length === 0 ? (
-                        <div style={{ color: '#94a3b8', textAlign: 'center', padding: '20px 0' }}>
+                        <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '32px 0', background: 'var(--surface)', borderRadius: 'var(--radius-lg)' }}>
                             Nicio comandă plasată încă
                         </div>
                     ) : (
                         myItems.map(item => (
-                            <div key={item.id} style={styles.orderItem}>
+                            <div key={item.id} className="order-item-row">
                                 <div>
-                                    <span>{item.quantity}x {item.product.name}</span>
+                                    <span style={{fontWeight: '600'}}>{item.quantity}x {item.product.name}</span>
                                     {item.notes && (
-                                        <div style={{ fontSize: 12, color: '#f59e0b', marginTop: 2 }}>
+                                        <div style={{ fontSize: 13, color: 'var(--warning)', marginTop: 4, fontWeight: '500' }}>
                                             {item.notes}
                                         </div>
                                     )}
                                 </div>
-                                <span style={styles.statusBadge}>
+                                <span className="item-status-badge" style={{
+                                    background: item.status === 'ready' ? 'var(--success-bg)' : item.status === 'pending' ? 'var(--surface-hover)' : 'var(--info-bg)',
+                                    color: item.status === 'ready' ? 'var(--success)' : item.status === 'pending' ? 'var(--text-muted)' : 'var(--info)'
+                                }}>
                                     {getStatusLabel(item.status)}
                                 </span>
                             </div>
                         ))
                     )}
-                    <div style={styles.cartTotal}>
+                    <div className="cart-total" style={{marginTop: '24px'}}>
                         Total grup: {myItems
                             .filter(i => i.status !== 'rejected')
                             .reduce((s, i) => s + i.quantity * parseFloat(i.unit_price || 0), 0)
                             .toFixed(2)} lei
                     </div>
                     <button
-                        style={styles.orderBtn}
+                        className="client-btn-secondary"
+                        style={{marginTop: '24px', background: 'var(--surface)'}}
                         onClick={() => setShowAddMenu(true)}
                     >
-                        + Adaugă mai multe
+                        + Adaugă mai multe produse
                     </button>
                 </div>
             )}
         </div>
     )
-}
-
-const styles = {
-    container: { maxWidth: 480, margin: '0 auto', padding: 16, fontFamily: 'sans-serif' },
-    center: { display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' },
-    title: { fontSize: 24, fontWeight: 'bold', marginBottom: 8, textAlign: 'center' },
-    subtitle: { fontSize: 20, fontWeight: 'bold', marginTop: 16, marginBottom: 8 },
-    categoryDetails: { marginBottom: 12, background: '#ffffff', borderRadius: 8, border: '1px solid #e2e8f0', overflow: 'hidden' },
-    categorySummary: { padding: '14px 16px', fontSize: 16, fontWeight: '600', color: '#1e293b', cursor: 'pointer', userSelect: 'none', background: '#f8fafc' },
-    categoryContent: { padding: '0 16px 8px 16px' },
-    productCard: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderBottom: '1px dashed #e2e8f0' },
-    productName: { fontWeight: '600', fontSize: '15px', color: '#1e293b' },
-    productPrice: { color: '#64748b', fontSize: '15px', fontWeight: '600', whiteSpace: 'nowrap' },
-    addBtn: { background: '#eef2ff', color: '#4f46e5', fontWeight: '600', border: 'none', borderRadius: '20px', padding: '6px 16px', cursor: 'pointer', transition: 'background 0.2s' },
-    removeBtn: { background: '#ef4444', color: 'white', border: 'none', borderRadius: 8, padding: '4px 8px', cursor: 'pointer' },
-    cart: { marginTop: 24, background: '#f9fafb', borderRadius: 12, padding: 16 },
-    cartItem: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '6px 0' },
-    cartTotal: { fontWeight: 'bold', marginTop: 8, fontSize: 18 },
-    orderBtn: { width: '100%', marginTop: 12, background: '#16a34a', color: 'white', border: 'none', borderRadius: 10, padding: '12px 0', fontSize: 16, cursor: 'pointer' },
-    orderStatus: { marginTop: 16 },
-    orderItem: { display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #eee' },
-    statusBadge: { fontSize: 14, color: '#555' },
-    itemNotes: { width: '100%', padding: '4px 8px', borderRadius: 6, border: '1px solid #ddd', fontSize: 13, boxSizing: 'border-box' },
-    groupCard: { background: '#f9fafb', borderRadius: 12, padding: 24, marginTop: 24 },
-    groupInput: { width: '100%', padding: '10px 14px', borderRadius: 8, border: '1px solid #cbd5e1', fontSize: 16, boxSizing: 'border-box' },
-    groupBadge: { background: '#ede9fe', color: '#7c3aed', padding: '4px 12px', borderRadius: 20, fontSize: 13, display: 'inline-block', marginBottom: 8 },
-    existingGroupBtn: { display: 'block', width: '100%', padding: '10px 14px', marginBottom: 8, borderRadius: 8, border: '2px solid #7c3aed', background: '#ede9fe', color: '#7c3aed', fontSize: 15, fontWeight: '500', cursor: 'pointer', textAlign: 'left' },
 }

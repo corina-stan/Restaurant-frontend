@@ -41,6 +41,20 @@ export default function AdminPage() {
     const [productRecipes, setProductRecipes] = useState([])
     const [newRecipeItem, setNewRecipeItem] = useState({ ingredient: '', quantity: '' })
 
+    // Reports State
+    const [reportData, setReportData] = useState({ labels: [], datasets: [] })
+    const [reportPeriod, setReportPeriod] = useState('day') // day, week, month
+    const [reportBreakdown, setReportBreakdown] = useState('total') // total, category, product
+    const [reportChartType, setReportChartType] = useState('line') // line, bar
+    const [reportPreset, setReportPreset] = useState('30d') // 7d, 30d, 90d, custom
+    const [reportCustomDates, setReportCustomDates] = useState({ start: '', end: '' })
+
+    // Logs State
+    const [logs, setLogs] = useState([])
+    const [logSearch, setLogSearch] = useState('')
+    const [logRoleFilter, setLogRoleFilter] = useState('all')
+    const [logTypeFilter, setLogTypeFilter] = useState('all')
+
     const loadData = async (accessToken) => {
         try {
             setLoading(true)
@@ -102,6 +116,70 @@ export default function AdminPage() {
         setUsers([])
         setIngredients([])
     }
+
+
+    const loadReportData = async () => {
+        if (!token) return
+        try {
+            setLoading(true)
+            let start = ''
+            let end = ''
+            if (reportPreset !== 'custom') {
+                const now = new Date()
+                let daysAgo = 30
+                if (reportPreset === '7d') daysAgo = 7
+                else if (reportPreset === '90d') daysAgo = 90
+                else if (reportPreset === 'today') daysAgo = 0
+                
+                const pastDate = new Date()
+                pastDate.setDate(now.getDate() - daysAgo)
+                
+                start = pastDate.toISOString().split('T')[0]
+                end = now.toISOString().split('T')[0]
+            } else {
+                start = reportCustomDates.start
+                end = reportCustomDates.end
+            }
+
+            const res = await api.get('/orders/reports/', {
+                params: {
+                    period: reportPeriod,
+                    breakdown: reportBreakdown,
+                    start_date: start,
+                    end_date: end
+                },
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            setReportData(res.data)
+        } catch (err) {
+            console.error(err)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    const loadLogsData = async () => {
+        if (!token) return
+        try {
+            setLoading(true)
+            const res = await api.get('/orders/operation-logs/', {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            setLogs(res.data)
+        } catch (err) {
+            console.error(err)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    useEffect(() => {
+        if (activeTab === 'reports') {
+            loadReportData()
+        } else if (activeTab === 'logs') {
+            loadLogsData()
+        }
+    }, [activeTab, reportPeriod, reportBreakdown, reportPreset, reportCustomDates, token])
 
     // --- Product Management ---
     const toggleAvailability = async (productId) => {
@@ -372,13 +450,19 @@ export default function AdminPage() {
                 </div>
                 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', flex: 1 }}>
-                    <div onClick={() => setActiveTab('menu')} style={{ padding: '12px 16px', background: activeTab === 'menu' ? '#1e293b' : 'transparent', borderRadius: '12px', cursor: 'pointer', fontWeight: '600' }}>
+                    <div onClick={() => setActiveTab('menu')} style={{ padding: '12px 16px', background: activeTab === 'menu' ? '#1e293b' : 'transparent', borderRadius: '12px', cursor: 'pointer', fontWeight: '600', transition: 'background 0.2s' }}>
                         📋 Gestiune Meniu
                     </div>
-                    <div onClick={() => setActiveTab('inventory')} style={{ padding: '12px 16px', background: activeTab === 'inventory' ? '#1e293b' : 'transparent', borderRadius: '12px', cursor: 'pointer', fontWeight: '600' }}>
+                    <div onClick={() => setActiveTab('inventory')} style={{ padding: '12px 16px', background: activeTab === 'inventory' ? '#1e293b' : 'transparent', borderRadius: '12px', cursor: 'pointer', fontWeight: '600', transition: 'background 0.2s' }}>
                         📦 Gestiune Stocuri
                     </div>
-                    <div onClick={() => setActiveTab('employees')} style={{ padding: '12px 16px', background: activeTab === 'employees' ? '#1e293b' : 'transparent', borderRadius: '12px', cursor: 'pointer', fontWeight: '600' }}>
+                    <div onClick={() => setActiveTab('reports')} style={{ padding: '12px 16px', background: activeTab === 'reports' ? '#1e293b' : 'transparent', borderRadius: '12px', cursor: 'pointer', fontWeight: '600', transition: 'background 0.2s' }}>
+                        📊 Rapoarte Vânzări
+                    </div>
+                    <div onClick={() => setActiveTab('logs')} style={{ padding: '12px 16px', background: activeTab === 'logs' ? '#1e293b' : 'transparent', borderRadius: '12px', cursor: 'pointer', fontWeight: '600', transition: 'background 0.2s' }}>
+                        📜 Istoric Operări
+                    </div>
+                    <div onClick={() => setActiveTab('employees')} style={{ padding: '12px 16px', background: activeTab === 'employees' ? '#1e293b' : 'transparent', borderRadius: '12px', cursor: 'pointer', fontWeight: '600', transition: 'background 0.2s' }}>
                         👥 Angajați
                     </div>
                 </div>
@@ -393,6 +477,29 @@ export default function AdminPage() {
 
             {/* Main Content */}
             <div style={{ flex: 1, padding: '40px 48px', overflowY: 'auto' }}>
+                
+                {/* GLOBAL LOW STOCK ALERTS BANNER */}
+                {ingredients.filter(i => i.is_low_stock).length > 0 && (
+                    <div style={{ background: '#fffbeb', borderLeft: '5px solid #f59e0b', padding: '16px 24px', borderRadius: '12px', marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 12px rgba(245, 158, 11, 0.08)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                            <span style={{ fontSize: '24px' }}>⚠️</span>
+                            <div>
+                                <h4 style={{ margin: 0, color: '#b45309', fontSize: '16px', fontWeight: '800' }}>
+                                    Atenție: Stoc Scăzut ({ingredients.filter(i => i.is_low_stock).length} ingrediente)
+                                </h4>
+                                <p style={{ margin: '4px 0 0 0', color: '#d97706', fontSize: '13px', fontWeight: '500' }}>
+                                    Ingredientele cu stoc critic: {ingredients.filter(i => i.is_low_stock).map(i => `${i.name} (${i.current_stock} ${i.unit})`).join(', ')}.
+                                </p>
+                            </div>
+                        </div>
+                        <button 
+                            onClick={() => setActiveTab('inventory')} 
+                            style={{ background: '#f59e0b', color: '#ffffff', border: 'none', padding: '8px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}
+                        >
+                            Mergi la Depozit
+                        </button>
+                    </div>
+                )}
                 
                 {loading ? (
                     <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Se încarcă datele...</div>
@@ -709,9 +816,47 @@ export default function AdminPage() {
                                 <div style={{ display: 'grid', gap: '12px' }}>
                                     {ingredients.map(ing => (
                                         <div key={ing.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                                            <div style={{ fontWeight: '600', color: '#0f172a' }}>{ing.name}</div>
-                                            <div style={{ fontSize: '15px', fontWeight: '700', color: parseFloat(ing.current_stock) < 0 ? '#ef4444' : '#1e293b' }}>
-                                                {ing.current_stock} <span style={{ color: '#64748b', fontSize: '13px', fontWeight: '500' }}>{ing.unit}</span>
+                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                <span style={{ fontWeight: '600', color: '#0f172a' }}>{ing.name}</span>
+                                                {ing.is_low_stock && (
+                                                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: '#fffbeb', color: '#d97706', border: '1px solid #fde68a', borderRadius: '6px', fontSize: '11px', padding: '2px 6px', marginTop: '4px', fontWeight: '700', width: 'fit-content' }}>
+                                                        ⚠️ Stoc Scăzut (sub {ing.alert_threshold_percentage}%)
+                                                    </span>
+                                                )}
+                                            </div>
+                                            
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                                    <span style={{ fontSize: '11px', color: '#64748b' }}>Alerte la:</span>
+                                                    <select 
+                                                        value={ing.alert_threshold_percentage || 25}
+                                                        onChange={async (e) => {
+                                                            const val = parseInt(e.target.value)
+                                                            try {
+                                                                await api.patch(`/menu/ingredients/${ing.id}/`, 
+                                                                    { alert_threshold_percentage: val },
+                                                                    { headers: { Authorization: `Bearer ${token}` } }
+                                                                )
+                                                                // Recalculate is_low_stock based on new threshold
+                                                                const lastQty = ing.last_purchased_quantity || 0
+                                                                const isLow = lastQty > 0 && parseFloat(ing.current_stock) < (lastQty * val / 100)
+                                                                setIngredients(prev => prev.map(i => i.id === ing.id ? { ...i, alert_threshold_percentage: val, is_low_stock: isLow } : i))
+                                                            } catch (err) {
+                                                                alert('Eroare la actualizarea pragului de alertă!')
+                                                            }
+                                                        }}
+                                                        style={{ padding: '4px 8px', borderRadius: '6px', border: '1px solid #cbd5e1', fontSize: '12px', background: '#ffffff', cursor: 'pointer', outline: 'none' }}
+                                                    >
+                                                        <option value="25">25% (un sfert)</option>
+                                                        <option value="10">10%</option>
+                                                        <option value="5">5%</option>
+                                                        <option value="0">Fără alerte</option>
+                                                    </select>
+                                                </div>
+
+                                                <div style={{ fontSize: '15px', fontWeight: '700', color: parseFloat(ing.current_stock) < 0 || ing.is_low_stock ? '#ef4444' : '#1e293b', textAlign: 'right' }}>
+                                                    {ing.current_stock} <span style={{ color: '#64748b', fontSize: '13px', fontWeight: '500' }}>{ing.unit}</span>
+                                                </div>
                                             </div>
                                         </div>
                                     ))}
@@ -762,7 +907,7 @@ export default function AdminPage() {
                         </div>
 
                     </>
-                ) : (
+                ) : activeTab === 'employees' ? (
                     <>
                         {/* Employees Tab */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
@@ -829,8 +974,478 @@ export default function AdminPage() {
                             </div>
                         </div>
                     </>
-                )}
+                ) : activeTab === 'reports' ? (
+                    <>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+                            <h1 style={{ fontSize: '32px', fontWeight: '800', color: '#0f172a', margin: 0 }}>📊 Rapoarte Vânzări</h1>
+                            <div style={{ display: 'flex', gap: '12px' }}>
+                                <button 
+                                    onClick={() => setReportChartType('line')} 
+                                    style={{ padding: '8px 16px', background: reportChartType === 'line' ? '#4f46e5' : '#ffffff', color: reportChartType === 'line' ? '#ffffff' : '#64748b', border: '1px solid #e2e8f0', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}
+                                >
+                                    📈 Linie
+                                </button>
+                                <button 
+                                    onClick={() => setReportChartType('bar')} 
+                                    style={{ padding: '8px 16px', background: reportChartType === 'bar' ? '#4f46e5' : '#ffffff', color: reportChartType === 'bar' ? '#ffffff' : '#64748b', border: '1px solid #e2e8f0', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}
+                                >
+                                    📊 Bare
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Controls Panel */}
+                        <div style={{ background: '#ffffff', padding: '20px 24px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'grid', gridTemplateColumns: '1fr 1fr 1.5fr 1fr', gap: '20px', marginBottom: '32px', alignItems: 'end' }}>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#475569', marginBottom: '8px' }}>Grupare Timp</label>
+                                <select value={reportPeriod} onChange={e => setReportPeriod(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', background: '#f8fafc', fontSize: '14px', fontWeight: '600' }}>
+                                    <option value="day">Zilnic</option>
+                                    <option value="week">Săptămânal</option>
+                                    <option value="month">Lunar</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#475569', marginBottom: '8px' }}>Vizualizare Per</label>
+                                <select value={reportBreakdown} onChange={e => setReportBreakdown(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', background: '#f8fafc', fontSize: '14px', fontWeight: '600' }}>
+                                    <option value="total">Total Restaurant</option>
+                                    <option value="category">Categorie Produs</option>
+                                    <option value="product">Produs Individual</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#475569', marginBottom: '8px' }}>Interval Predefinit</label>
+                                <select value={reportPreset} onChange={e => setReportPreset(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', background: '#f8fafc', fontSize: '14px', fontWeight: '600' }}>
+                                    <option value="today">Azi</option>
+                                    <option value="7d">Ultimele 7 zile</option>
+                                    <option value="30d">Ultimele 30 zile</option>
+                                    <option value="90d">Ultimele 90 zile</option>
+                                    <option value="custom">Personalizat (Custom)</option>
+                                </select>
+                            </div>
+
+                            {reportPreset === 'custom' && (
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                    <div style={{ flex: 1 }}>
+                                        <label style={{ display: 'block', fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>De la</label>
+                                        <input type="date" value={reportCustomDates.start} onChange={e => setReportCustomDates({...reportCustomDates, start: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '12px' }} />
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <label style={{ display: 'block', fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>Până la</label>
+                                        <input type="date" value={reportCustomDates.end} onChange={e => setReportCustomDates({...reportCustomDates, end: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '12px' }} />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Chart Render */}
+                        <div style={{ background: '#ffffff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#1e293b' }}>
+                                    Grafic Evoluție Vânzări ({reportPeriod === 'day' ? 'Zilnic' : reportPeriod === 'week' ? 'Săptămânal' : 'Lunar'})
+                                </h3>
+                                <div style={{ fontSize: '14px', color: '#64748b', fontWeight: '600' }}>
+                                    Total Vânzări Interval: <strong style={{ color: '#10b981' }}>{reportData.datasets?.reduce((acc, d) => acc + d.data.reduce((a, b) => a + b, 0), 0).toFixed(2)} lei</strong>
+                                </div>
+                            </div>
+                            <InteractiveSVGChart data={reportData} type={reportChartType} />
+                        </div>
+                    </>
+                ) : activeTab === 'logs' ? (
+                    <>
+                        <h1 style={{ fontSize: '32px', fontWeight: '800', color: '#0f172a', marginBottom: '32px' }}>📜 Istoric Operațiuni</h1>
+
+                        {/* Search and Filters */}
+                        <div style={{ background: '#ffffff', padding: '20px 24px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '20px', marginBottom: '32px' }}>
+                            <div>
+                                <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#475569', marginBottom: '8px' }}>Caută Comandă</label>
+                                <input 
+                                    placeholder="Caută după nr. comandă sau operator..." 
+                                    value={logSearch} 
+                                    onChange={e => setLogSearch(e.target.value)} 
+                                    style={{ width: '100%', padding: '10px 14px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none' }}
+                                />
+                            </div>
+
+                            <div>
+                                <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#475569', marginBottom: '8px' }}>Filtru Rol</label>
+                                <select value={logRoleFilter} onChange={e => setLogRoleFilter(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', background: '#f8fafc', fontWeight: '600' }}>
+                                    <option value="all">Toate Rolurile</option>
+                                    <option value="admin">Administrator</option>
+                                    <option value="waiter">Ospătar</option>
+                                    <option value="barman">Barman</option>
+                                    <option value="kitchen">Bucătar</option>
+                                    <option value="client">Client/Sistem</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#475569', marginBottom: '8px' }}>Filtru Acțiune</label>
+                                <select value={logTypeFilter} onChange={e => setLogTypeFilter(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', background: '#f8fafc', fontWeight: '600' }}>
+                                    <option value="all">Toate Acțiunile</option>
+                                    <option value="Creare Comandă">Creare Comandă</option>
+                                    <option value="Actualizare Comandă">Actualizare Comandă</option>
+                                    <option value="Schimbare Status Preparat">Status Preparate</option>
+                                    <option value="Plată și Închidere">Plată & Închidere</option>
+                                    <option value="Recepție Marfă (NIR)">Recepție NIR</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* Logs Table */}
+                        <div style={{ background: '#ffffff', borderRadius: '16px', padding: '24px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr 3fr', gap: '16px', padding: '0 16px 12px 16px', fontSize: '14px', fontWeight: '700', color: '#64748b', borderBottom: '2px solid #f1f5f9', marginBottom: '16px' }}>
+                                <div>Dată & Oră</div>
+                                <div>Tip Acțiune</div>
+                                <div>Comandă #</div>
+                                <div>Operator (Rol)</div>
+                                <div>Descriere Detaliată</div>
+                            </div>
+
+                            <div style={{ display: 'grid', gap: '12px', maxHeight: '550px', overflowY: 'auto' }}>
+                                {logs
+                                    .filter(log => {
+                                        const matchesSearch = 
+                                            log.order_number?.includes(logSearch) || 
+                                            log.user_name?.toLowerCase().includes(logSearch.toLowerCase()) ||
+                                            log.description?.toLowerCase().includes(logSearch.toLowerCase());
+                                        const matchesRole = logRoleFilter === 'all' || log.user_role === logRoleFilter;
+                                        const matchesType = logTypeFilter === 'all' || log.operation_type === logTypeFilter;
+                                        return matchesSearch && matchesRole && matchesType;
+                                    })
+                                    .map(log => {
+                                        const date = new Date(log.created_at);
+                                        const formattedDate = `${date.toLocaleDateString('ro-RO')} ${date.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' })}`;
+                                        
+                                        const roleColors = {
+                                            admin: { bg: '#fee2e2', text: '#ef4444' },
+                                            waiter: { bg: '#e0e7ff', text: '#4f46e5' },
+                                            barman: { bg: '#ecfdf5', text: '#10b981' },
+                                            kitchen: { bg: '#fff7ed', text: '#f97316' },
+                                            client: { bg: '#f1f5f9', text: '#64748b' }
+                                        };
+                                        const colors = roleColors[log.user_role] || roleColors.client;
+
+                                        return (
+                                            <div key={log.id} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr 3fr', gap: '16px', alignItems: 'center', padding: '16px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', fontSize: '14px', transition: 'all 0.2s' }}>
+                                                <div style={{ fontWeight: '600', color: '#475569' }}>{formattedDate}</div>
+                                                <div>
+                                                    <span style={{ fontWeight: '700', color: '#0f172a' }}>{log.operation_type}</span>
+                                                </div>
+                                                <div style={{ fontWeight: '700', color: '#4f46e5' }}>
+                                                    {log.order_number ? `#${log.order_number}` : '-'}
+                                                </div>
+                                                <div>
+                                                    <span style={{ fontWeight: '600', color: '#0f172a', marginRight: '6px' }}>{log.user_name}</span>
+                                                    <span style={{ background: colors.bg, color: colors.text, padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '700', textTransform: 'uppercase' }}>
+                                                        {roleMap[log.user_role] || log.user_role}
+                                                    </span>
+                                                </div>
+                                                <div style={{ color: '#334155', lineHeight: '1.4' }}>{log.description}</div>
+                                            </div>
+                                        );
+                                    })}
+                                {logs.length === 0 && <div style={{ textAlign: 'center', padding: '40px', color: '#94a3b8' }}>Nicio operațiune înregistrată în istoric.</div>}
+                            </div>
+                        </div>
+                    </>
+                ) : null}
             </div>
+        </div>
+    )
+}
+
+function InteractiveSVGChart({ data, type }) {
+    const [hoverInfo, setHoverInfo] = useState(null)
+    if (!data || !data.labels || data.labels.length === 0) {
+        return (
+            <div style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #cbd5e1', color: '#64748b' }}>
+                Nicio dată de vânzări înregistrată pentru acest interval.
+            </div>
+        )
+    }
+
+    const labels = data.labels
+    const datasets = data.datasets
+
+    // Dimensions
+    const width = 750
+    const height = 350
+    const padding = { top: 30, right: 150, bottom: 40, left: 60 }
+
+    const chartWidth = width - padding.left - padding.right
+    const chartHeight = height - padding.top - padding.bottom
+
+    // Find max value across all datasets
+    let maxVal = 0
+    datasets.forEach(d => {
+        d.data.forEach(val => {
+            if (val > maxVal) maxVal = val
+        })
+    })
+    if (maxVal === 0) maxVal = 100 // default range if no sales
+    
+    // Round maxVal to a nice number
+    const roundToNiceNumber = (num) => {
+        if (num <= 10) return 10
+        if (num <= 50) return 50
+        if (num <= 100) return 100
+        if (num <= 500) return 500
+        if (num <= 1000) return 1000
+        if (num <= 5000) return 5000
+        if (num <= 10000) return 10000
+        const magnitude = Math.pow(10, Math.floor(Math.log10(num)))
+        const normalized = num / magnitude
+        let rounded
+        if (normalized <= 1.5) rounded = 1.5
+        else if (normalized <= 2) rounded = 2
+        else if (normalized <= 5) rounded = 5
+        else rounded = 10
+        return rounded * magnitude
+    }
+    maxVal = roundToNiceNumber(maxVal * 1.1)
+
+    // Palette of vibrant colors
+    const colors = [
+        { stroke: '#4f46e5', fill: 'rgba(79, 70, 229, 0.08)' }, // Indigo
+        { stroke: '#06b6d4', fill: 'rgba(6, 182, 212, 0.08)' }, // Cyan
+        { stroke: '#10b981', fill: 'rgba(16, 185, 129, 0.08)' }, // Emerald
+        { stroke: '#f59e0b', fill: 'rgba(245, 158, 11, 0.08)' }, // Amber
+        { stroke: '#ec4899', fill: 'rgba(236, 72, 153, 0.08)' }, // Pink
+        { stroke: '#8b5cf6', fill: 'rgba(139, 92, 246, 0.08)' }, // Violet
+    ]
+
+    // X coordinates
+    const numPoints = labels.length
+    const getX = (index) => {
+        if (numPoints <= 1) return padding.left + chartWidth / 2
+        return padding.left + (index / (numPoints - 1)) * chartWidth
+    }
+
+    // Y coordinates
+    const getY = (val) => {
+        return padding.top + chartHeight - (val / maxVal) * chartHeight
+    }
+
+    // Grid lines Y
+    const gridTicks = 5
+    const yGridLines = Array.from({ length: gridTicks + 1 }).map((_, idx) => {
+        const val = (idx / gridTicks) * maxVal
+        return { val, y: getY(val) }
+    })
+
+    return (
+        <div style={{ position: 'relative', background: '#ffffff', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+            <svg viewBox={`0 0 ${width} ${height}`} width="100%" height="100%" style={{ overflow: 'visible' }}>
+                {/* Y-Axis Grid Lines */}
+                {yGridLines.map((tick, idx) => (
+                    <g key={idx}>
+                        <line 
+                            x1={padding.left} 
+                            y1={tick.y} 
+                            x2={padding.left + chartWidth} 
+                            y2={tick.y} 
+                            stroke="#f1f5f9" 
+                            strokeWidth="1.5"
+                        />
+                        <text 
+                            x={padding.left - 10} 
+                            y={tick.y + 4} 
+                            textAnchor="end" 
+                            fill="#94a3b8" 
+                            style={{ fontSize: '11px', fontWeight: '500', fontFamily: 'sans-serif' }}
+                        >
+                            {Math.round(tick.val)} lei
+                        </text>
+                    </g>
+                ))}
+
+                {/* X-Axis labels */}
+                {labels.map((lbl, idx) => {
+                    const showLabel = numPoints < 15 || idx % Math.ceil(numPoints / 10) === 0 || idx === numPoints - 1
+                    if (!showLabel) return null
+                    return (
+                        <text 
+                            key={idx}
+                            x={getX(idx)} 
+                            y={height - padding.bottom + 20} 
+                            textAnchor="middle" 
+                            fill="#94a3b8" 
+                            style={{ fontSize: '11px', fontWeight: '500', fontFamily: 'sans-serif' }}
+                        >
+                            {lbl}
+                        </text>
+                    )
+                })}
+
+                {/* Render Datasets */}
+                {type === 'line' ? (
+                    datasets.map((dataset, dIdx) => {
+                        const color = colors[dIdx % colors.length]
+                        
+                        let pathD = ""
+                        dataset.data.forEach((val, pIdx) => {
+                            const x = getX(pIdx)
+                            const y = getY(val)
+                            if (pIdx === 0) {
+                                pathD = `M ${x} ${y}`
+                            } else {
+                                pathD += ` L ${x} ${y}`
+                            }
+                        })
+
+                        let areaD = ""
+                        if (dataset.data.length > 0) {
+                            const firstX = getX(0)
+                            const lastX = getX(dataset.data.length - 1)
+                            const baselineY = padding.top + chartHeight
+                            areaD = `${pathD} L ${lastX} ${baselineY} L ${firstX} ${baselineY} Z`
+                        }
+
+                        return (
+                            <g key={dIdx}>
+                                <path 
+                                    d={areaD} 
+                                    fill={color.fill}
+                                    style={{ transition: 'all 0.3s' }}
+                                />
+                                <path 
+                                    d={pathD} 
+                                    fill="none" 
+                                    stroke={color.stroke} 
+                                    strokeWidth="3" 
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    style={{ transition: 'all 0.3s' }}
+                                />
+                                {dataset.data.map((val, pIdx) => {
+                                    const x = getX(pIdx)
+                                    const y = getY(val)
+                                    return (
+                                        <circle 
+                                            key={pIdx}
+                                            cx={x} 
+                                            cy={y} 
+                                            r="5" 
+                                            fill="#ffffff" 
+                                            stroke={color.stroke} 
+                                            strokeWidth="3"
+                                            style={{ cursor: 'pointer', transition: 'all 0.2s' }}
+                                            onMouseEnter={() => {
+                                                setHoverInfo({
+                                                    x: x,
+                                                    y: y,
+                                                    label: labels[pIdx],
+                                                    val: val,
+                                                    datasetLabel: dataset.label
+                                                })
+                                            }}
+                                            onMouseLeave={() => {
+                                                setHoverInfo(null)
+                                            }}
+                                        />
+                                    )
+                                })}
+                            </g>
+                        )
+                    })
+                ) : (
+                    // Bar Chart
+                    datasets.map((dataset, dIdx) => {
+                        const color = colors[dIdx % colors.length]
+                        const numDatasets = datasets.length
+                        const calculatedBarWidth = (chartWidth / numPoints) / (numDatasets + 1)
+                        const barWidth = Math.min(40, Math.max(4, calculatedBarWidth))
+
+                        return (
+                            <g key={dIdx}>
+                                {dataset.data.map((val, pIdx) => {
+                                    const groupX = getX(pIdx)
+                                    const offset = (dIdx - (numDatasets - 1) / 2) * barWidth
+                                    const x = groupX + offset - barWidth / 2
+                                    const y = getY(val)
+                                    const barHeight = (val / maxVal) * chartHeight
+
+                                    return (
+                                        <rect 
+                                            key={pIdx}
+                                            x={x}
+                                            y={y}
+                                            width={barWidth - 2}
+                                            height={Math.max(0, barHeight)}
+                                            fill={color.stroke}
+                                            rx="3"
+                                            style={{ cursor: 'pointer', transition: 'all 0.2s', opacity: 0.95 }}
+                                            onMouseEnter={() => {
+                                                setHoverInfo({
+                                                    x: x + barWidth / 2,
+                                                    y: y,
+                                                    label: labels[pIdx],
+                                                    val: val,
+                                                    datasetLabel: dataset.label
+                                                })
+                                            }}
+                                            onMouseLeave={() => {
+                                                setHoverInfo(null)
+                                            }}
+                                        />
+                                    )
+                                })}
+                            </g>
+                        )
+                    })
+                )}
+
+                {/* Legend */}
+                <g transform={`translate(${width - padding.right + 20}, ${padding.top})`}>
+                    {datasets.map((dataset, dIdx) => {
+                        const color = colors[dIdx % colors.length]
+                        const y = dIdx * 24
+                        return (
+                            <g key={dIdx} transform={`translate(0, ${y})`}>
+                                <rect width="14" height="14" rx="4" fill={color.stroke} />
+                                <text 
+                                    x="22" 
+                                    y="11" 
+                                    fill="#475569" 
+                                    style={{ fontSize: '12px', fontWeight: '600', fontFamily: 'sans-serif' }}
+                                >
+                                    {dataset.label.length > 15 ? dataset.label.substring(0, 15) + '...' : dataset.label}
+                                </text>
+                            </g>
+                        )
+                    })}
+                </g>
+            </svg>
+
+            {hoverInfo && (
+                <div 
+                    style={{
+                        position: 'absolute',
+                        left: `${(hoverInfo.x / width) * 100}%`,
+                        top: `${(hoverInfo.y / height) * 100 - 15}%`,
+                        transform: 'translate(-50%, -100%)',
+                        background: '#0f172a',
+                        color: '#f8fafc',
+                        padding: '10px 14px',
+                        borderRadius: '8px',
+                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)',
+                        pointerEvents: 'none',
+                        zIndex: 10,
+                        fontSize: '12px',
+                        fontFamily: 'sans-serif',
+                        whiteSpace: 'nowrap',
+                        border: '1px solid #1e293b'
+                    }}
+                >
+                    <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '600', marginBottom: '4px' }}>{hoverInfo.label}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <span style={{ fontWeight: '700' }}>{hoverInfo.datasetLabel}:</span>
+                        <span style={{ color: '#38bdf8', fontWeight: '800' }}>{hoverInfo.val.toFixed(2)} lei</span>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
