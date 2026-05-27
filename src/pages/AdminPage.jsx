@@ -29,12 +29,92 @@ export default function AdminPage() {
     // Inventory state
     const [showNewIngredientForm, setShowNewIngredientForm] = useState(false)
     const [newIngredient, setNewIngredient] = useState({ name: '', unit: 'kg' })
+    const [inventorySearchQuery, setInventorySearchQuery] = useState('')
+    const [showIngredientsDropdown, setShowIngredientsDropdown] = useState(false)
+    const [expandedInvoices, setExpandedInvoices] = useState({})
+
+    const normalizeString = (str) => {
+        if (!str) return ''
+        return str
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase()
+    }
+
+    const toggleInvoiceExpand = (invId) => {
+        setExpandedInvoices(prev => ({
+            ...prev,
+            [invId]: !prev[invId]
+        }))
+    }
     
     // Purchase Invoices (NIR) state
     const [showNewInvoiceForm, setShowNewInvoiceForm] = useState(false)
-    const [newInvoice, setNewInvoice] = useState({ invoice_number: '', supplier_name: '', date: new Date().toISOString().split('T')[0] })
+    const [newInvoice, setNewInvoice] = useState({ invoice_number: '', supplier_name: '', supplier_id: null, date: new Date().toISOString().split('T')[0] })
     const [newInvoiceItems, setNewInvoiceItems] = useState([])
-    const [invoiceLine, setInvoiceLine] = useState({ ingredientName: '', quantity: '', unit_price_without_vat: '', vat_rate: 9 })
+    const [invoiceLine, setInvoiceLine] = useState({ ingredientName: '', quantity: '', unit_price_without_vat: '', vat_rate: 11 })
+
+    // Suppliers State
+    const [suppliers, setSuppliers] = useState([])
+    const [supplierSearchQuery, setSupplierSearchQuery] = useState('')
+    const [showSuppliersDropdown, setShowSuppliersDropdown] = useState(false)
+    const [showNewSupplierForm, setShowNewSupplierForm] = useState(false)
+    const [newSupplierData, setNewSupplierData] = useState({ name: '', fiscal_code: '', trade_registry_number: '', address: '' })
+
+    const handleSelectSupplier = (sup) => {
+        setNewInvoice(prev => ({
+            ...prev,
+            supplier_id: sup.id,
+            supplier_name: sup.name
+        }))
+        setSupplierSearchQuery(sup.name)
+        setShowSuppliersDropdown(false)
+        setShowNewSupplierForm(false)
+    }
+
+    const handleSupplierSearchChange = (val) => {
+        setSupplierSearchQuery(val)
+        setNewInvoice(prev => ({
+            ...prev,
+            supplier_id: null,
+            supplier_name: val
+        }))
+        setShowSuppliersDropdown(true)
+    }
+
+    const handleCreateSupplier = async () => {
+        if (!supplierSearchQuery.trim()) {
+            alert('Te rog să introduci numele furnizorului!')
+            return
+        }
+        try {
+            const payload = {
+                name: supplierSearchQuery.trim(),
+                fiscal_code: newSupplierData.fiscal_code.trim(),
+                trade_registry_number: newSupplierData.trade_registry_number.trim(),
+                address: newSupplierData.address.trim()
+            }
+            const res = await api.post('/menu/suppliers/', payload, { headers: { Authorization: `Bearer ${token}` } })
+            
+            // Add to suppliers list
+            setSuppliers(prev => [...prev, res.data])
+            
+            // Select it automatically
+            setNewInvoice(prev => ({
+                ...prev,
+                supplier_id: res.data.id,
+                supplier_name: res.data.name
+            }))
+            
+            // Reset states
+            setShowNewSupplierForm(false)
+            setShowSuppliersDropdown(false)
+            setNewSupplierData({ name: '', fiscal_code: '', trade_registry_number: '', address: '' })
+            alert(`Furnizorul "${res.data.name}" a fost creat și selectat cu succes!`)
+        } catch (err) {
+            alert('Eroare la crearea furnizorului. Posibil ca acest nume să fie deja utilizat.')
+        }
+    }
 
     // Recipe state
     const [recipeViewProduct, setRecipeViewProduct] = useState(null)
@@ -58,18 +138,20 @@ export default function AdminPage() {
     const loadData = async (accessToken) => {
         try {
             setLoading(true)
-            const [prodRes, catRes, userRes, ingRes, invRes] = await Promise.all([
+            const [prodRes, catRes, userRes, ingRes, invRes, supRes] = await Promise.all([
                 api.get('/menu/products/', { headers: { Authorization: `Bearer ${accessToken}` } }),
                 api.get('/menu/categories/', { headers: { Authorization: `Bearer ${accessToken}` } }),
                 api.get('/accounts/users/', { headers: { Authorization: `Bearer ${accessToken}` } }),
                 api.get('/menu/ingredients/', { headers: { Authorization: `Bearer ${accessToken}` } }),
-                api.get('/menu/purchase_invoices/', { headers: { Authorization: `Bearer ${accessToken}` } })
+                api.get('/menu/purchase_invoices/', { headers: { Authorization: `Bearer ${accessToken}` } }),
+                api.get('/menu/suppliers/', { headers: { Authorization: `Bearer ${accessToken}` } })
             ])
             setProducts(prodRes.data)
             setCategories(catRes.data)
             setUsers(userRes.data)
             setIngredients(ingRes.data)
             setInvoices(invRes.data)
+            setSuppliers(supRes.data)
         } catch (err) {
             console.error(err)
             if (err.response?.status === 401) {
@@ -115,6 +197,8 @@ export default function AdminPage() {
         setProducts([])
         setUsers([])
         setIngredients([])
+        setSuppliers([])
+        setInvoices([])
     }
 
 
@@ -379,7 +463,8 @@ export default function AdminPage() {
             setIngredients(ingRes.data)
             
             setShowNewInvoiceForm(false)
-            setNewInvoice({ invoice_number: '', supplier_name: '', date: new Date().toISOString().split('T')[0] })
+            setNewInvoice({ invoice_number: '', supplier_name: '', supplier_id: null, date: new Date().toISOString().split('T')[0] })
+            setSupplierSearchQuery('')
             setNewInvoiceItems([])
         } catch (err) {
             alert('Eroare la salvarea facturii.')
@@ -416,7 +501,7 @@ export default function AdminPage() {
     }
 
     // Product filtering and sorting
-    let filteredProducts = products.filter(p => p.name.toLowerCase().includes(productSearch.toLowerCase()))
+    let filteredProducts = products.filter(p => normalizeString(p.name).includes(normalizeString(productSearch)))
     
     // Sort all alphabetically
     filteredProducts.sort((a, b) => a.name.localeCompare(b.name))
@@ -479,28 +564,7 @@ export default function AdminPage() {
             <div style={{ flex: 1, padding: '40px 48px', overflowY: 'auto' }}>
                 
                 {/* GLOBAL LOW STOCK ALERTS BANNER */}
-                {ingredients.filter(i => i.is_low_stock).length > 0 && (
-                    <div style={{ background: '#fffbeb', borderLeft: '5px solid #f59e0b', padding: '16px 24px', borderRadius: '12px', marginBottom: '32px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 4px 12px rgba(245, 158, 11, 0.08)' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                            <span style={{ fontSize: '24px' }}>⚠️</span>
-                            <div>
-                                <h4 style={{ margin: 0, color: '#b45309', fontSize: '16px', fontWeight: '800' }}>
-                                    Atenție: Stoc Scăzut ({ingredients.filter(i => i.is_low_stock).length} ingrediente)
-                                </h4>
-                                <p style={{ margin: '4px 0 0 0', color: '#d97706', fontSize: '13px', fontWeight: '500' }}>
-                                    Ingredientele cu stoc critic: {ingredients.filter(i => i.is_low_stock).map(i => `${i.name} (${i.current_stock} ${i.unit})`).join(', ')}.
-                                </p>
-                            </div>
-                        </div>
-                        <button 
-                            onClick={() => setActiveTab('inventory')} 
-                            style={{ background: '#f59e0b', color: '#ffffff', border: 'none', padding: '8px 16px', borderRadius: '8px', fontSize: '12px', fontWeight: '700', cursor: 'pointer' }}
-                        >
-                            Mergi la Depozit
-                        </button>
-                    </div>
-                )}
-                
+
                 {loading ? (
                     <div style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Se încarcă datele...</div>
                 ) : activeTab === 'menu' ? (
@@ -678,6 +742,40 @@ export default function AdminPage() {
                             </div>
                         </div>
 
+                        {/* Prominent Low Stock Notifications Alert Widget */}
+                        {ingredients.filter(i => i.is_low_stock).length > 0 && (
+                            <div style={{ 
+                                background: '#fff7ed', 
+                                border: '1px solid #ffedd5', 
+                                borderRadius: '16px', 
+                                padding: '20px', 
+                                marginBottom: '32px', 
+                                boxShadow: '0 4px 6px -1px rgba(249, 115, 22, 0.05)',
+                                borderLeft: '5px solid #ea580c'
+                            }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+                                    <span style={{ fontSize: '20px' }}>⚠️</span>
+                                    <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#ea580c' }}>
+                                        Atenție: Produse cu Stoc Scăzut ({ingredients.filter(i => i.is_low_stock).length})
+                                    </h3>
+                                </div>
+                                <p style={{ margin: '0 0 16px 0', fontSize: '14px', color: '#c2410c', fontWeight: '500' }}>
+                                    Următoarele materii prime au coborât sub pragul de alertă stabilit. Se recomandă reaprovizionarea!
+                                </p>
+                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                                    {ingredients.filter(i => i.is_low_stock).map(ing => (
+                                        <div key={ing.id} style={{ background: '#ffffff', border: '1px solid #ffedd5', padding: '8px 14px', borderRadius: '10px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 1px 2px rgba(0,0,0,0.02)' }}>
+                                            <span style={{ fontWeight: '700', color: '#1e293b' }}>{ing.name}</span>
+                                            <span style={{ color: '#ea580c', fontWeight: '800' }}>{ing.current_stock} {ing.unit}</span>
+                                            <span style={{ background: '#ffedd5', color: '#ea580c', padding: '2px 6px', borderRadius: '6px', fontSize: '11px', fontWeight: '700' }}>
+                                                sub {ing.alert_threshold_percentage}%
+                                            </span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
                         {showNewIngredientForm && (
                             <div style={{ background: '#ffffff', padding: '24px', borderRadius: '16px', marginBottom: '32px', border: '1px solid #e2e8f0', position: 'relative' }}>
                                 <button onClick={() => setShowNewIngredientForm(false)} style={{ position: 'absolute', top: '24px', right: '24px', background: 'transparent', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#94a3b8', padding: '0' }}>✕</button>
@@ -711,9 +809,85 @@ export default function AdminPage() {
                                 
                                 {/* Invoice Header */}
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '24px' }}>
-                                    <div>
+                                    <div style={{ position: 'relative' }}>
                                         <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '600' }}>Furnizor</label>
-                                        <input value={newInvoice.supplier_name} onChange={e => setNewInvoice({...newInvoice, supplier_name: e.target.value})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1' }} placeholder="Ex: Selgros, Metro" />
+                                        <input 
+                                            value={supplierSearchQuery} 
+                                            onChange={e => handleSupplierSearchChange(e.target.value)} 
+                                            onFocus={() => setShowSuppliersDropdown(true)}
+                                            onBlur={() => {
+                                                // Short delay to allow click event to register
+                                                setTimeout(() => setShowSuppliersDropdown(false), 200)
+                                            }}
+                                            style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }} 
+                                            placeholder="Caută sau scrie furnizor..." 
+                                        />
+                                        
+                                        {/* Dropdown list of suppliers */}
+                                        {showSuppliersDropdown && (
+                                            <div style={{ 
+                                                position: 'absolute', 
+                                                top: '100%', 
+                                                left: 0, 
+                                                right: 0, 
+                                                background: '#ffffff', 
+                                                border: '1px solid #cbd5e1', 
+                                                borderRadius: '8px', 
+                                                maxHeight: '220px', 
+                                                overflowY: 'auto', 
+                                                zIndex: 1100, 
+                                                boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' 
+                                            }}>
+                                                {suppliers
+                                                    .filter(s => normalizeString(s.name).includes(normalizeString(supplierSearchQuery)))
+                                                    .map(s => (
+                                                        <div 
+                                                            key={s.id} 
+                                                            onMouseDown={() => handleSelectSupplier(s)}
+                                                            style={{ 
+                                                                padding: '10px 14px', 
+                                                                cursor: 'pointer', 
+                                                                borderBottom: '1px solid #f1f5f9',
+                                                                fontSize: '13px',
+                                                                color: '#1e293b'
+                                                            }}
+                                                            onMouseEnter={e => e.target.style.background = '#f8fafc'}
+                                                            onMouseLeave={e => e.target.style.background = 'transparent'}
+                                                        >
+                                                            <div style={{ fontWeight: '600' }}>{s.name}</div>
+                                                            {s.fiscal_code && (
+                                                                <div style={{ fontSize: '11px', color: '#64748b', marginTop: '2px' }}>
+                                                                    CUI: {s.fiscal_code} | Reg.Com: {s.trade_registry_number}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ))
+                                                }
+                                                {/* Button to trigger the inline creation form */}
+                                                <div 
+                                                    onMouseDown={(e) => {
+                                                        e.preventDefault()
+                                                        e.stopPropagation()
+                                                        setShowNewSupplierForm(true)
+                                                        setShowSuppliersDropdown(false)
+                                                    }}
+                                                    style={{ 
+                                                        padding: '12px 14px', 
+                                                        background: '#f0fdf4', 
+                                                        color: '#16a34a', 
+                                                        fontWeight: '700', 
+                                                        fontSize: '13px', 
+                                                        cursor: 'pointer', 
+                                                        textAlign: 'center',
+                                                        borderTop: '1px solid #e2e8f0'
+                                                    }}
+                                                    onMouseEnter={e => e.target.style.background = '#dcfce7'}
+                                                    onMouseLeave={e => e.target.style.background = '#f0fdf4'}
+                                                >
+                                                    ➕ Creează furnizor nou: "{supplierSearchQuery || '...'}"
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
                                     <div>
                                         <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '600' }}>Număr Factură (NIR)</label>
@@ -725,23 +899,149 @@ export default function AdminPage() {
                                     </div>
                                 </div>
 
+                                {/* Active supplier card or dynamic supplier creation sub-form */}
+                                {newInvoice.supplier_id && (
+                                    (() => {
+                                        const sup = suppliers.find(s => s.id === newInvoice.supplier_id)
+                                        if (!sup) return null
+                                        return (
+                                            <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '14px 18px', marginBottom: '24px', fontSize: '13px', color: '#166534', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                                <div>
+                                                    <strong style={{ fontSize: '14px', color: '#14532d' }}>🏢 Furnizor Selectat: {sup.name}</strong>
+                                                    <div style={{ marginTop: '4px', color: '#166534' }}>
+                                                        CUI: <strong>{sup.fiscal_code || '-'}</strong> | Reg. Com: <strong>{sup.trade_registry_number || '-'}</strong>
+                                                    </div>
+                                                    {sup.address && <div style={{ marginTop: '2px' }}>Adresă: {sup.address}</div>}
+                                                </div>
+                                                <button 
+                                                    onClick={() => {
+                                                        setNewInvoice({ ...newInvoice, supplier_id: null, supplier_name: '' })
+                                                        setSupplierSearchQuery('')
+                                                    }}
+                                                    style={{ background: '#fee2e2', color: '#ef4444', border: 'none', padding: '6px 12px', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '11px' }}
+                                                >
+                                                    Schimbă
+                                                </button>
+                                            </div>
+                                        )
+                                    })()
+                                )}
+
+                                {showNewSupplierForm && (
+                                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '20px', marginBottom: '24px', position: 'relative' }}>
+                                        <h4 style={{ margin: '0 0 16px 0', fontSize: '15px', color: '#1e293b' }}>
+                                            🆕 Detalii Furnizor Nou: <span style={{ color: '#4f46e5', fontWeight: '800' }}>{supplierSearchQuery}</span>
+                                        </h4>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginBottom: '16px' }}>
+                                            <div>
+                                                <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: '#475569' }}>Cod Fiscal (CUI / CIF)</label>
+                                                <input 
+                                                    value={newSupplierData.fiscal_code} 
+                                                    onChange={e => setNewSupplierData({ ...newSupplierData, fiscal_code: e.target.value })}
+                                                    placeholder="Ex: RO12345678"
+                                                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: '#475569' }}>Reg. Comerțului</label>
+                                                <input 
+                                                    value={newSupplierData.trade_registry_number} 
+                                                    onChange={e => setNewSupplierData({ ...newSupplierData, trade_registry_number: e.target.value })}
+                                                    placeholder="Ex: J40/123/2020"
+                                                    style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', boxSizing: 'border-box' }}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div style={{ marginBottom: '20px' }}>
+                                            <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', marginBottom: '6px', color: '#475569' }}>Adresă Completă</label>
+                                            <textarea 
+                                                rows="2"
+                                                value={newSupplierData.address} 
+                                                onChange={e => setNewSupplierData({ ...newSupplierData, address: e.target.value })}
+                                                placeholder="Ex: Str. Principală, Nr. 10, Cluj-Napoca"
+                                                style={{ width: '100%', padding: '8px 12px', borderRadius: '8px', border: '1px solid #cbd5e1', boxSizing: 'border-box', fontFamily: 'inherit' }}
+                                            />
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                                            <button 
+                                                onClick={() => {
+                                                    setShowNewSupplierForm(false)
+                                                    setNewSupplierData({ name: '', fiscal_code: '', trade_registry_number: '', address: '' })
+                                                }}
+                                                style={{ background: '#e2e8f0', color: '#475569', border: 'none', padding: '8px 16px', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}
+                                            >
+                                                Anulează
+                                            </button>
+                                            <button 
+                                                onClick={handleCreateSupplier}
+                                                style={{ background: '#16a34a', color: 'white', border: 'none', padding: '8px 20px', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', fontSize: '13px' }}
+                                            >
+                                                Salvează Furnizor
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
                                 {/* Add Line Item */}
                                 <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '12px', marginBottom: '24px' }}>
                                     <h4 style={{ margin: '0 0 16px 0', color: '#475569' }}>Adaugă Produs pe Factură</h4>
                                     
                                     <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr auto', gap: '12px', alignItems: 'end' }}>
-                                        <div>
+                                        <div style={{ position: 'relative' }}>
                                             <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', marginBottom: '4px' }}>Caută/Scrie Ingredient</label>
                                             <input 
-                                                list="ingredients-list"
                                                 value={invoiceLine.ingredientName} 
-                                                onChange={e => setInvoiceLine({...invoiceLine, ingredientName: e.target.value})} 
+                                                onChange={e => {
+                                                    setInvoiceLine({...invoiceLine, ingredientName: e.target.value})
+                                                    setShowIngredientsDropdown(true)
+                                                }} 
+                                                onFocus={() => setShowIngredientsDropdown(true)}
+                                                onBlur={() => {
+                                                    // Short delay to allow click event to register
+                                                    setTimeout(() => setShowIngredientsDropdown(false), 200)
+                                                }}
                                                 style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1' }} 
                                                 placeholder="ex: Roșii, Ursus..." 
                                             />
-                                            <datalist id="ingredients-list">
-                                                {ingredients.map(i => <option key={i.id} value={i.name} />)}
-                                            </datalist>
+                                            {showIngredientsDropdown && (
+                                                <div style={{ 
+                                                    position: 'absolute', 
+                                                    top: '100%', 
+                                                    left: 0, 
+                                                    right: 0, 
+                                                    background: '#ffffff', 
+                                                    border: '1px solid #cbd5e1', 
+                                                    borderRadius: '8px', 
+                                                    maxHeight: '180px', 
+                                                    overflowY: 'auto', 
+                                                    zIndex: 1000, 
+                                                    boxShadow: '0 4px 10px rgba(0,0,0,0.1)' 
+                                                }}>
+                                                    {ingredients
+                                                        .filter(i => normalizeString(i.name).includes(normalizeString(invoiceLine.ingredientName)))
+                                                        .map(i => (
+                                                            <div 
+                                                                key={i.id} 
+                                                                onMouseDown={() => {
+                                                                    setInvoiceLine({...invoiceLine, ingredientName: i.name})
+                                                                    setShowIngredientsDropdown(false)
+                                                                }}
+                                                                style={{ 
+                                                                    padding: '10px 12px', 
+                                                                    cursor: 'pointer', 
+                                                                    borderBottom: '1px solid #f1f5f9',
+                                                                    fontSize: '13px',
+                                                                    color: '#1e293b'
+                                                                }}
+                                                                onMouseEnter={e => e.target.style.background = '#f8fafc'}
+                                                                onMouseLeave={e => e.target.style.background = 'transparent'}
+                                                            >
+                                                                    {i.name}
+                                                            </div>
+                                                        ))
+                                                    }
+                                                </div>
+                                            )}
                                         </div>
                                         <div>
                                             <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', marginBottom: '4px' }}>Cantitate</label>
@@ -754,12 +1054,12 @@ export default function AdminPage() {
                                         <div>
                                             <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', marginBottom: '4px' }}>Cota TVA (%)</label>
                                             <select value={invoiceLine.vat_rate} onChange={e => setInvoiceLine({...invoiceLine, vat_rate: e.target.value})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1' }}>
-                                                <option value="9">9% (Alimente)</option>
-                                                <option value="19">19% (Standard)</option>
+                                                <option value="11">11% (Alimente)</option>
+                                                <option value="21">21% (Nonalimentare)</option>
+                                                <option value="9">9% (Vechi Alimente)</option>
+                                                <option value="19">19% (Vechi Standard)</option>
                                                 <option value="0">0% (Scutit)</option>
                                                 <option value="5">5%</option>
-                                                <option value="11">11%</option>
-                                                <option value="21">21%</option>
                                             </select>
                                         </div>
                                         <button onClick={addInvoiceLine} style={{ background: '#3b82f6', color: 'white', border: 'none', padding: '10px 24px', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', height: '40px' }}>
@@ -807,14 +1107,49 @@ export default function AdminPage() {
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '32px' }}>
                             {/* Stoc Curent Column */}
                             <div style={{ background: '#ffffff', borderRadius: '16px', padding: '24px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-                                <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#1e293b', marginTop: 0, marginBottom: '24px' }}>Stoc Curent (Magazie)</h2>
+                                <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#1e293b', marginTop: 0, marginBottom: '16px' }}>Stoc Curent (Magazie)</h2>
+                                
+                                <div style={{ position: 'relative', marginBottom: '20px' }}>
+                                    <input 
+                                        type="text" 
+                                        placeholder="Caută în stoc (fără diacritice)..." 
+                                        value={inventorySearchQuery} 
+                                        onChange={e => setInventorySearchQuery(e.target.value)} 
+                                        style={{ 
+                                            width: '100%', 
+                                            padding: '10px 12px 10px 36px', 
+                                            borderRadius: '10px', 
+                                            border: '1px solid #cbd5e1', 
+                                            fontSize: '14px', 
+                                            outline: 'none', 
+                                            boxSizing: 'border-box' 
+                                        }} 
+                                    />
+                                    <svg 
+                                        width="16" 
+                                        height="16" 
+                                        viewBox="0 0 24 24" 
+                                        fill="none" 
+                                        stroke="#64748b" 
+                                        strokeWidth="2.5" 
+                                        strokeLinecap="round" 
+                                        strokeLinejoin="round" 
+                                        style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }}
+                                    >
+                                        <circle cx="11" cy="11" r="8"></circle>
+                                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                    </svg>
+                                </div>
+
                                 <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '16px', padding: '0 16px 12px 16px', fontSize: '14px', fontWeight: '600', color: '#64748b', borderBottom: '2px solid #f1f5f9', marginBottom: '16px' }}>
                                     <div>Ingredient</div>
                                     <div style={{ textAlign: 'right' }}>Cantitate</div>
                                 </div>
                                 
                                 <div style={{ display: 'grid', gap: '12px' }}>
-                                    {ingredients.map(ing => (
+                                    {ingredients
+                                        .filter(ing => normalizeString(ing.name).includes(normalizeString(inventorySearchQuery)))
+                                        .map(ing => (
                                         <div key={ing.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
                                             <div style={{ display: 'flex', flexDirection: 'column' }}>
                                                 <span style={{ fontWeight: '600', color: '#0f172a' }}>{ing.name}</span>
@@ -861,6 +1196,9 @@ export default function AdminPage() {
                                         </div>
                                     ))}
                                     {ingredients.length === 0 && <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8' }}>Magazia este goală.</div>}
+                                    {ingredients.length > 0 && ingredients.filter(ing => normalizeString(ing.name).includes(normalizeString(inventorySearchQuery))).length === 0 && (
+                                        <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8' }}>Nu s-au găsit ingrediente care să corespundă căutării.</div>
+                                    )}
                                 </div>
                             </div>
 
@@ -868,39 +1206,92 @@ export default function AdminPage() {
                             <div style={{ background: '#ffffff', borderRadius: '16px', padding: '24px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
                                 <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#1e293b', marginTop: 0, marginBottom: '24px' }}>Istoric Facturi (NIR-uri)</h2>
                                 <div style={{ display: 'grid', gap: '16px' }}>
-                                    {invoices.map(inv => (
-                                        <div key={inv.id} style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden' }}>
-                                            <div style={{ background: '#f8fafc', padding: '12px 16px', borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                <div>
-                                                    <div style={{ fontWeight: '700', color: '#0f172a' }}>Factura: {inv.invoice_number}</div>
-                                                    <div style={{ fontSize: '13px', color: '#64748b' }}>Furnizor: {inv.supplier_name}</div>
-                                                </div>
-                                                <div style={{ fontSize: '13px', fontWeight: '600', color: '#475569', background: '#e2e8f0', padding: '4px 10px', borderRadius: '20px' }}>
-                                                    {inv.date}
-                                                </div>
-                                            </div>
-                                            <div style={{ padding: '12px 16px', background: '#ffffff' }}>
-                                                <div style={{ fontSize: '12px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '8px', letterSpacing: '0.5px' }}>Linii recepționate</div>
-                                                <div style={{ display: 'grid', gap: '6px' }}>
-                                                    {inv.items.map(item => {
-                                                        const valNoVat = (parseFloat(item.quantity) * parseFloat(item.unit_price_without_vat || 0)).toFixed(2);
-                                                        const valWithVat = (valNoVat * (1 + parseFloat(item.vat_rate || 0) / 100)).toFixed(2);
-                                                        return (
-                                                        <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px', color: '#334155', borderBottom: '1px solid #f1f5f9', paddingBottom: '6px' }}>
-                                                            <div>
-                                                                <span style={{ fontWeight: '600', color: '#0f172a' }}>{item.ingredient_name}</span>
-                                                                <div style={{ fontSize: '12px', color: '#64748b' }}>{item.quantity} {item.ingredient_unit} x {item.unit_price_without_vat || 0} lei</div>
-                                                            </div>
-                                                            <div style={{ textAlign: 'right' }}>
-                                                                <div style={{ fontSize: '12px', color: '#64748b' }}>Fără TVA: {valNoVat} lei</div>
-                                                                <div style={{ fontWeight: '600', fontSize: '13px', color: '#1e293b' }}>Total: {valWithVat} lei (TVA {item.vat_rate}%)</div>
-                                                            </div>
+                                    {invoices.map(inv => {
+                                        const invoiceTotalWithVat = inv.items.reduce((sum, item) => {
+                                            const valNoVat = parseFloat(item.quantity) * parseFloat(item.unit_price_without_vat || 0);
+                                            const valWithVat = valNoVat * (1 + parseFloat(item.vat_rate || 0) / 100);
+                                            return sum + valWithVat;
+                                        }, 0).toFixed(2);
+
+                                        const isExpanded = !!expandedInvoices[inv.id];
+
+                                        return (
+                                            <div key={inv.id} style={{ border: '1px solid #e2e8f0', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 2px 4px rgba(0,0,0,0.02)' }}>
+                                                <div 
+                                                    onClick={() => toggleInvoiceExpand(inv.id)} 
+                                                    style={{ 
+                                                        background: '#f8fafc', 
+                                                        padding: '16px', 
+                                                        borderBottom: isExpanded ? '1px solid #e2e8f0' : 'none', 
+                                                        display: 'flex', 
+                                                        justifyContent: 'space-between', 
+                                                        alignItems: 'center', 
+                                                        cursor: 'pointer',
+                                                        transition: 'background 0.2s',
+                                                        userSelect: 'none'
+                                                    }}
+                                                    onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                                                    onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}
+                                                >
+                                                    <div>
+                                                        <div style={{ fontWeight: '700', color: '#0f172a', fontSize: '15px' }}>Factura: {inv.invoice_number}</div>
+                                                        <div style={{ fontSize: '13px', color: '#64748b', marginTop: '2px' }}>Furnizor: {inv.supplier_name}</div>
+                                                    </div>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                                                        <div style={{ textAlign: 'right' }}>
+                                                            <div style={{ fontSize: '10px', color: '#64748b', textTransform: 'uppercase', fontWeight: '700', letterSpacing: '0.5px' }}>Total Cu TVA</div>
+                                                            <div style={{ fontSize: '15px', fontWeight: '800', color: '#16a34a' }}>{invoiceTotalWithVat} lei</div>
                                                         </div>
-                                                    )})}
+                                                        <div style={{ fontSize: '13px', fontWeight: '600', color: '#475569', background: '#e2e8f0', padding: '4px 10px', borderRadius: '20px' }}>
+                                                            {inv.date}
+                                                        </div>
+                                                        <div style={{ 
+                                                            transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)', 
+                                                            transition: 'transform 0.2s', 
+                                                            display: 'flex', 
+                                                            alignItems: 'center', 
+                                                            color: '#64748b' 
+                                                        }}>
+                                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                                                <polyline points="6 9 12 15 18 9"></polyline>
+                                                            </svg>
+                                                        </div>
+                                                    </div>
                                                 </div>
+                                                {isExpanded && (
+                                                    <div style={{ padding: '16px', background: '#ffffff' }}>
+                                                        {inv.supplier && (
+                                                            <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px 14px', marginBottom: '14px', fontSize: '12px', color: '#475569' }}>
+                                                                <div style={{ fontWeight: '700', color: '#1e293b', marginBottom: '4px' }}>🏢 Detalii Furnizor: {inv.supplier.name}</div>
+                                                                {inv.supplier.fiscal_code && <span style={{ marginRight: '16px' }}>CUI: <strong>{inv.supplier.fiscal_code}</strong></span>}
+                                                                {inv.supplier.trade_registry_number && <span>Reg. Com: <strong>{inv.supplier.trade_registry_number}</strong></span>}
+                                                                {inv.supplier.address && <div style={{ marginTop: '4px', color: '#64748b' }}>Adresă: {inv.supplier.address}</div>}
+                                                            </div>
+                                                        )}
+                                                        <div style={{ fontSize: '11px', fontWeight: '700', color: '#94a3b8', textTransform: 'uppercase', marginBottom: '12px', letterSpacing: '0.5px' }}>Linii recepționate ({inv.items.length})</div>
+                                                        <div style={{ display: 'grid', gap: '8px' }}>
+                                                            {inv.items.map(item => {
+                                                                const valNoVat = (parseFloat(item.quantity) * parseFloat(item.unit_price_without_vat || 0)).toFixed(2);
+                                                                const valWithVat = (valNoVat * (1 + parseFloat(item.vat_rate || 0) / 100)).toFixed(2);
+                                                                return (
+                                                                    <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '14px', color: '#334155', borderBottom: '1px solid #f1f5f9', paddingBottom: '8px', paddingTop: '4px' }}>
+                                                                        <div>
+                                                                            <span style={{ fontWeight: '600', color: '#0f172a' }}>{item.ingredient_name}</span>
+                                                                            <div style={{ fontSize: '12px', color: '#64748b', marginTop: '2px' }}>{item.quantity} {item.ingredient_unit} x {item.unit_price_without_vat || 0} lei (fără TVA)</div>
+                                                                        </div>
+                                                                        <div style={{ textAlign: 'right' }}>
+                                                                            <div style={{ fontSize: '12px', color: '#64748b' }}>Fără TVA: {valNoVat} lei</div>
+                                                                            <div style={{ fontWeight: '600', fontSize: '13px', color: '#16a34a' }}>Total: {valWithVat} lei (TVA {item.vat_rate}%)</div>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </div>
+                                                )}
                                             </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                     {invoices.length === 0 && <div style={{ textAlign: 'center', padding: '20px', color: '#94a3b8' }}>Nu există nicio factură înregistrată.</div>}
                                 </div>
                             </div>

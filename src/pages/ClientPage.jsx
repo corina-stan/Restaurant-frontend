@@ -128,6 +128,25 @@ export default function ClientPage() {
         setCart(prev => prev.filter(i => i.cartId !== cartId))
     }
 
+    const updateCartQuantity = (cartId, delta) => {
+        setCart(prev => prev.map(item => {
+            if (item.cartId === cartId) {
+                const newQty = item.quantity + delta
+                return { ...item, quantity: Math.max(1, newQty) }
+            }
+            return item
+        }))
+    }
+
+    const setCartQuantity = (cartId, val) => {
+        setCart(prev => prev.map(item => {
+            if (item.cartId === cartId) {
+                return { ...item, quantity: Math.max(1, val) }
+            }
+            return item
+        }))
+    }
+
     const placeOrder = async () => {
         if (!sessionToken || cart.length === 0) return
         try {
@@ -357,7 +376,23 @@ export default function ClientPage() {
                                 <div key={item.cartId} className="cart-item">
                                     <div style={{ flex: 1 }}>
                                         <div className="cart-item-header">
-                                            <span>{item.quantity}x {item.product.name}</span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <div className="quantity-selector">
+                                                    <button className="quantity-btn" onClick={() => updateCartQuantity(item.cartId, -1)}>-</button>
+                                                    <input 
+                                                        type="number" 
+                                                        min="1" 
+                                                        className="quantity-input" 
+                                                        value={item.quantity} 
+                                                        onChange={e => {
+                                                            const val = parseInt(e.target.value) || 1
+                                                            setCartQuantity(item.cartId, val)
+                                                        }} 
+                                                    />
+                                                    <button className="quantity-btn" onClick={() => updateCartQuantity(item.cartId, 1)}>+</button>
+                                                </div>
+                                                <span>{item.product.name}</span>
+                                            </div>
                                             <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
                                                 <span style={{color: 'var(--primary)', fontWeight: '800'}}>{(item.quantity * item.product.price).toFixed(2)} lei</span>
                                                 <button className="remove-btn" onClick={() => removeFromCart(item.cartId)}>✕</button>
@@ -394,7 +429,23 @@ export default function ClientPage() {
                                 <div key={item.cartId} className="cart-item">
                                     <div style={{ flex: 1 }}>
                                         <div className="cart-item-header">
-                                            <span>{item.quantity}x {item.product.name}</span>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                <div className="quantity-selector">
+                                                    <button className="quantity-btn" onClick={() => updateCartQuantity(item.cartId, -1)}>-</button>
+                                                    <input 
+                                                        type="number" 
+                                                        min="1" 
+                                                        className="quantity-input" 
+                                                        value={item.quantity} 
+                                                        onChange={e => {
+                                                            const val = parseInt(e.target.value) || 1
+                                                            setCartQuantity(item.cartId, val)
+                                                        }} 
+                                                    />
+                                                    <button className="quantity-btn" onClick={() => updateCartQuantity(item.cartId, 1)}>+</button>
+                                                </div>
+                                                <span>{item.product.name}</span>
+                                            </div>
                                             <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
                                                 <span style={{color: 'var(--primary)', fontWeight: '800'}}>{(item.quantity * item.product.price).toFixed(2)} lei</span>
                                                 <button className="remove-btn" onClick={() => removeFromCart(item.cartId)}>✕</button>
