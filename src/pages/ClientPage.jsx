@@ -25,6 +25,16 @@ export default function ClientPage() {
     const [showAddMenu, setShowAddMenu] = useState(false)
     const [existingGroups, setExistingGroups] = useState([])
 
+    // Waiter calling & Bill requests
+    const [waiterCalled, setWaiterCalled] = useState(false)
+    const [billRequested, setBillRequested] = useState(false)
+    const [showBillModal, setShowBillModal] = useState(false)
+    const [paymentMethod, setPaymentMethod] = useState('cash')
+    const [tipPercent, setTipPercent] = useState(10)
+    const [tipAmount, setTipAmount] = useState('0')
+
+
+
     const updateOrder = (newOrder) => {
         setOrder(newOrder)
     }
@@ -76,8 +86,11 @@ export default function ClientPage() {
         initSession()
     }, [tableNumber, groupName])
 
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsHost = window.location.host;
+
     useWebSocket(
-        `ws://localhost:5173/ws/table/${tableNumber}/`,
+        `${wsProtocol}//${wsHost}/ws/table/${tableNumber}/`,
         (data) => {
             if (data.type === 'order_update') {
                 setOrder(prev => {
@@ -100,6 +113,20 @@ export default function ClientPage() {
                     }
                 })
             }
+            if (data.type === 'payment_completed') {
+                const loadOrderUpdates = async () => {
+                    try {
+                        const ordersRes = await api.get(`/orders/table/${tableNumber}/`)
+                        if (ordersRes.data.length > 0) {
+                            const activeOrder = ordersRes.data[ordersRes.data.length - 1]
+                            setOrder(activeOrder)
+                        }
+                    } catch (err) {
+                        console.log('Eroare reîncărcare comandă după plată', err)
+                    }
+                }
+                loadOrderUpdates()
+            }
             if (data.type === 'product_availability') {
                 setMenu(prev => prev.map(p =>
                     p.id === data.product_id
@@ -109,6 +136,33 @@ export default function ClientPage() {
             }
         }
     )
+
+    const callWaiter = async () => {
+        try {
+            await api.post(`/tables/${tableNumber}/call_waiter/`)
+            setWaiterCalled(true)
+            alert('Ospătarul a fost solicitat la masa ta!')
+            setTimeout(() => setWaiterCalled(false), 30000)
+        } catch (err) {
+            alert('Eroare la solicitarea ospătarului!')
+        }
+    }
+
+    const requestBill = async (finalTip) => {
+        try {
+            await api.post(`/tables/${tableNumber}/request_bill/`, {
+                payment_method: paymentMethod,
+                tip: parseFloat(finalTip || tipAmount || 0),
+                group_name: groupName,
+                group_id: groupId
+            })
+            setShowBillModal(false)
+            setBillRequested(true)
+            alert('Solicitarea pentru nota de plată a fost trimisă!')
+        } catch (err) {
+            alert('Eroare la solicitarea notei de plată!')
+        }
+    }
 
     const addToCart = (product) => {
         setCart(prev => {
@@ -224,6 +278,19 @@ export default function ClientPage() {
 
     const myGroup = order?.groups?.find(g => g.id === groupId)
     const myItems = myGroup ? myGroup.items : []
+    const myTotal = myItems
+        .filter(i => i.status !== 'rejected')
+        .reduce((s, i) => s + i.quantity * parseFloat(i.unit_price || 0), 0)
+
+    const isGroupPaid = order?.payments?.some(p => p.group === groupId && p.status === 'completed')
+
+    useEffect(() => {
+        if (tipPercent !== 'custom') {
+            const pct = parseFloat(tipPercent) || 0
+            const calculated = pct === 0 ? 0 : (myTotal * pct / 100).toFixed(2)
+            setTipAmount(calculated.toString())
+        }
+    }, [tipPercent, myTotal, showBillModal])
 
     const getProductImage = (catName) => {
         const lower = catName.toLowerCase();
@@ -360,10 +427,234 @@ export default function ClientPage() {
 
     return (
         <div className="client-container">
+            <style>{`
+                .client-action-btn-row {
+                    display: flex;
+                    gap: 12px;
+                    justify-content: center;
+                    margin-bottom: 24px;
+                }
+                .client-action-btn {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    background: var(--surface);
+                    border: 1.5px solid var(--border);
+                    color: var(--text);
+                    padding: 10px 18px;
+                    border-radius: 9999px;
+                    font-weight: 700;
+                    font-size: 14px;
+                    cursor: pointer;
+                    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+                    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);
+                }
+                .client-action-btn:hover {
+                    transform: translateY(-2px);
+                    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+                    border-color: var(--primary);
+                }
+                .client-action-btn-accent {
+                    background: var(--primary);
+                    border-color: var(--primary);
+                    color: white;
+                }
+                .client-action-btn-accent:hover {
+                    background: var(--primary-hover, #ef4444);
+                    border-color: var(--primary-hover, #ef4444);
+                }
+                .client-modal-backdrop {
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(15, 23, 42, 0.6);
+                    backdrop-filter: blur(8px);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    z-index: 9999;
+                    padding: 16px;
+                    animation: clientFadeIn 0.3s ease-out;
+                }
+                .client-modal-content {
+                    background: white;
+                    border-radius: 24px;
+                    width: 100%;
+                    max-width: 440px;
+                    padding: 24px;
+                    box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+                    color: #0f172a;
+                    animation: clientScaleUp 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+                }
+                .client-modal-title {
+                    font-size: 20px;
+                    font-weight: 800;
+                    margin: 0 0 8px 0;
+                    color: #0f172a;
+                    text-align: center;
+                }
+                .client-modal-label {
+                    font-size: 12px;
+                    font-weight: 800;
+                    text-transform: uppercase;
+                    color: #64748b;
+                    letter-spacing: 0.5px;
+                }
+                .client-select-btn {
+                    background: #f1f5f9;
+                    border: 2px solid transparent;
+                    border-radius: 12px;
+                    padding: 10px;
+                    font-weight: 700;
+                    font-size: 13px;
+                    color: #334155;
+                    cursor: pointer;
+                    transition: all 0.2s ease;
+                }
+                .client-select-btn:hover {
+                    background: #e2e8f0;
+                }
+                .client-select-btn.active {
+                    background: #fef2f2;
+                    border-color: #ef4444;
+                    color: #ef4444;
+                }
+                .client-modal-input {
+                    width: 100%;
+                    padding: 12px 16px;
+                    border: 2px solid #cbd5e1;
+                    border-radius: 12px;
+                    font-size: 15px;
+                    color: #0f172a;
+                    font-weight: 600;
+                    box-sizing: border-box;
+                    transition: all 0.2s ease;
+                }
+                .client-modal-input:focus {
+                    outline: none;
+                    border-color: #ef4444;
+                    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+                }
+                @keyframes clientFadeIn {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+                @keyframes clientScaleUp {
+                    from { transform: scale(0.95); opacity: 0; }
+                    to { transform: scale(1); opacity: 1; }
+                }
+            `}</style>
+
             <h1 className="client-title">Masa {tableNumber}</h1>
             <div style={{ textAlign: 'center', marginBottom: 16 }}>
                 <span className="client-group-badge">Grupul: {groupName}</span>
             </div>
+
+            <div className="client-action-btn-row">
+                <button onClick={callWaiter} disabled={waiterCalled || isGroupPaid} className="client-action-btn">
+                    {waiterCalled ? '⏳ Solicitare trimisă...' : '🔔 Cheamă Ospătar'}
+                </button>
+                {order && myItems.length > 0 && !isGroupPaid && (
+                    <button onClick={() => setShowBillModal(true)} disabled={billRequested} className="client-action-btn client-action-btn-accent">
+                        {billRequested ? '⏳ Notă solicitată...' : '💳 Cere Nota'}
+                    </button>
+                )}
+            </div>
+
+            {showBillModal && (
+                <div className="client-modal-backdrop">
+                    <div className="client-modal-content">
+                        <h3 className="client-modal-title">Solicitare Nota de Plată</h3>
+                        <div style={{ display: 'grid', gap: '16px', marginTop: '16px' }}>
+                            {/* Method selection */}
+                            <div>
+                                <label className="client-modal-label">Metoda de Plată</label>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px', marginTop: '6px' }}>
+                                    {['cash', 'card', 'ticket'].map(m => (
+                                        <button
+                                            key={m}
+                                            onClick={() => setPaymentMethod(m)}
+                                            className={`client-select-btn ${paymentMethod === m ? 'active' : ''}`}
+                                        >
+                                            {m === 'cash' ? '💵 Cash' : m === 'card' ? '💳 Card' : '🎟️ Tichet'}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Tip selection */}
+                            <div>
+                                <label className="client-modal-label">Bacșiș (Tip)</label>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '6px', marginTop: '6px' }}>
+                                    {[0, 10, 15].map(pct => {
+                                        const calculatedTip = pct === 0 ? 0 : (myTotal * pct / 100).toFixed(2);
+                                        return (
+                                            <button
+                                                key={pct}
+                                                onClick={() => {
+                                                    setTipPercent(pct)
+                                                    setTipAmount(calculatedTip)
+                                                }}
+                                                className={`client-select-btn ${tipPercent === pct ? 'active' : ''}`}
+                                            >
+                                                {pct}% ({calculatedTip} L)
+                                            </button>
+                                        )
+                                    })}
+                                    <button
+                                        onClick={() => {
+                                            setTipPercent('custom')
+                                            setTipAmount('')
+                                        }}
+                                        className={`client-select-btn ${tipPercent === 'custom' ? 'active' : ''}`}
+                                    >
+                                        Custom
+                                    </button>
+                                </div>
+                                {tipPercent === 'custom' && (
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        className="client-modal-input"
+                                        style={{ marginTop: '8px' }}
+                                        placeholder="Sumă bacșiș (lei)..."
+                                        value={tipAmount}
+                                        onChange={e => setTipAmount(e.target.value)}
+                                    />
+                                )}
+                            </div>
+
+                            {/* Summary */}
+                            <div className="client-bill-summary" style={{ background: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0', marginTop: '8px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
+                                    <span>Consumație grup:</span>
+                                    <span style={{ fontWeight: '600' }}>{myTotal.toFixed(2)} lei</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginTop: '4px' }}>
+                                    <span>Bacșiș ({tipPercent !== 'custom' ? `${tipPercent}%` : 'Personalizat'}):</span>
+                                    <span style={{ fontWeight: '600' }}>{parseFloat(tipAmount || 0).toFixed(2)} lei</span>
+                                </div>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px', fontWeight: '800', color: 'var(--primary)', borderTop: '1px dashed #cbd5e1', paddingTop: '8px', marginTop: '8px' }}>
+                                    <span>Total de Plată:</span>
+                                    <span>{(myTotal + parseFloat(tipAmount || 0)).toFixed(2)} lei</span>
+                                </div>
+                            </div>
+
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginTop: '16px' }}>
+                                <button onClick={() => setShowBillModal(false)} className="client-btn-secondary" style={{ margin: 0, padding: '10px' }}>
+                                    Anulează
+                                </button>
+                                <button onClick={() => requestBill()} className="client-btn-primary" style={{ margin: 0, padding: '10px' }}>
+                                    Trimite Cerere
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {!order && !showAddMenu && (
                 <>
@@ -507,13 +798,30 @@ export default function ClientPage() {
                             .reduce((s, i) => s + i.quantity * parseFloat(i.unit_price || 0), 0)
                             .toFixed(2)} lei
                     </div>
-                    <button
-                        className="client-btn-secondary"
-                        style={{marginTop: '24px', background: 'var(--surface)'}}
-                        onClick={() => setShowAddMenu(true)}
-                    >
-                        + Adaugă mai multe produse
-                    </button>
+                    {!isGroupPaid ? (
+                        <button
+                            className="client-btn-secondary"
+                            style={{marginTop: '24px', background: 'var(--surface)'}}
+                            onClick={() => setShowAddMenu(true)}
+                        >
+                            + Adaugă mai multe produse
+                        </button>
+                    ) : (
+                        <div style={{
+                            marginTop: '24px',
+                            background: 'rgba(16, 185, 129, 0.1)',
+                            border: '1.5px solid #10b981',
+                            color: '#065f46',
+                            padding: '16px',
+                            borderRadius: '16px',
+                            textAlign: 'center',
+                            fontWeight: '700',
+                            fontSize: '15px',
+                            animation: 'clientFadeIn 0.3s ease-out'
+                        }}>
+                            🎉 Grupul tău a fost achitat cu succes! Vă mulțumim și vă mai așteptăm!
+                        </div>
+                    )}
                 </div>
             )}
         </div>

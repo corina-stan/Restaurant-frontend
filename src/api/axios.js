@@ -8,6 +8,11 @@ const api = axios.create({
 })
 
 api.interceptors.request.use((config) => {
+    // Do not attach waiter/admin JWT tokens on client table pages to avoid 401s
+    if (window.location.pathname.includes('/table/')) {
+        return config
+    }
+
     const token = sessionStorage.getItem('admin_token') ||
         sessionStorage.getItem('access_token') ||
         sessionStorage.getItem('kitchen_token') ||

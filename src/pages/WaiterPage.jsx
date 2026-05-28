@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useWebSocket } from '../hooks/useWebSocket'
 import api from '../api/axios'
 import '../DesktopLayout.css'
+import DocumentPrintModal from '../components/DocumentPrintModal'
 
 export default function WaiterPage() {
     const [tables, setTables] = useState([])
@@ -17,6 +18,13 @@ export default function WaiterPage() {
     const [tip, setTip] = useState(0)
     const [paidGroups, setPaidGroups] = useState(new Set())
     const [username, setUsername] = useState(sessionStorage.getItem('waiter_username') || '')
+
+    // Printing and history states
+    const [printModalOpen, setPrintModalOpen] = useState(false)
+    const [docType, setDocType] = useState('receipt_command')
+    const [selectedPrintData, setSelectedPrintData] = useState(null)
+    const [recentPayments, setRecentPayments] = useState([])
+    const [showPaymentsHistory, setShowPaymentsHistory] = useState(false)
 
     useEffect(() => {
         const savedToken = sessionStorage.getItem('access_token')
@@ -95,8 +103,11 @@ export default function WaiterPage() {
         }
     }
 
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsHost = window.location.host;
+
     useWebSocket(
-        'ws://localhost:5173/ws/waiters/',
+        `${wsProtocol}//${wsHost}/ws/waiters/`,
         (data) => {
             if (data.type === 'item_ready') {
                 setNotifications(prev => {
@@ -107,7 +118,23 @@ export default function WaiterPage() {
                 if (token) loadOrders(token)
             }
             if (data.type === 'assistance_requested') {
-                setNotifications(prev => [data, ...prev])
+                setNotifications(prev => {
+                    const exists = prev.find(n => n.type === 'assistance_requested' && n.table_number === data.table_number)
+                    if (exists) return prev
+                    return [data, ...prev]
+                })
+            }
+            if (data.type === 'bill_requested') {
+                setNotifications(prev => {
+                    const exists = prev.find(n => 
+                        n.type === 'bill_requested' && 
+                        n.table_number === data.table_number && 
+                        n.group_id === data.group_id
+                    )
+                    if (exists) return prev
+                    return [data, ...prev]
+                })
+                if (token) loadOrders(token)
             }
             if (data.type === 'new_order') {
                 if (token) loadOrders(token)
@@ -131,6 +158,13 @@ export default function WaiterPage() {
                 if (token) loadOrders(token)
             }
             if (data.type === 'payment_completed') {
+                const tNum = parseInt(data.table_number)
+                const gId = data.group_id ? parseInt(data.group_id) : null
+                setNotifications(prev => prev.filter(n => !(
+                    n.type === 'bill_requested' && 
+                    parseInt(n.table_number) === tNum && 
+                    (gId === null || !n.group_id || parseInt(n.group_id) === gId)
+                )))
                 if (token) loadOrders(token)
             }
         }
@@ -171,7 +205,17 @@ export default function WaiterPage() {
         return `${order.items.length} iteme • ${total.toFixed(2)} lei`
     }
 
-    const dismissNotification = (idx) => {
+    const dismissNotification = async (idx) => {
+        const n = notifications[idx]
+        if (n && (n.type === 'assistance_requested' || n.type === 'bill_requested') && n.table_number) {
+            try {
+                await api.post(`/tables/${n.table_number}/dismiss_notification/`, {}, {
+                    headers: { Authorization: `Bearer ${token}` }
+                })
+            } catch (err) {
+                console.error(err)
+            }
+        }
         setNotifications(prev => prev.filter((_, i) => i !== idx))
     }
 
@@ -189,11 +233,15 @@ export default function WaiterPage() {
         }
     }
 
-    const openPayment = (order, group = null) => {
+    const openPayment = (order, group = null, method = null, initialTip = null) => {
         setPayingOrder(order)
         setPayingGroup(group)
-        setTip(0)
-        setPaymentMethod('cash')
+        
+        const finalMethod = method || order.bill_payment_method || 'cash'
+        const finalTip = initialTip !== null ? initialTip : (parseFloat(order.bill_tip) || 0)
+        
+        setTip(finalTip)
+        setPaymentMethod(finalMethod)
     }
 
     const getPaymentItems = () => {
@@ -228,7 +276,7 @@ export default function WaiterPage() {
             }
             if (payingGroup) payload.group_id = payingGroup.id
 
-            await api.post('/payments/create/', payload, {
+            const res = await api.post('/payments/create/', payload, {
                 headers: { Authorization: `Bearer ${token}` }
             })
 
@@ -236,12 +284,34 @@ export default function WaiterPage() {
                 setPaidGroups(prev => new Set([...prev, payingGroup.id]))
             }
 
+            // Dismiss the notification on the backend
+            try {
+                await api.post(`/tables/${payingOrder.table_number}/dismiss_notification/`, {}, {
+                    headers: { Authorization: `Bearer ${token}` }
+                })
+            } catch (dismissErr) {
+                console.error('Eroare la stergerea notificarii pe backend:', dismissErr)
+            }
+
+            // Instantly clear the bill request notification for this table and group locally
+            const tNum = parseInt(payingOrder.table_number)
+            const gId = payingGroup ? payingGroup.id : null
+            setNotifications(prev => prev.filter(n => !(
+                n.type === 'bill_requested' && 
+                parseInt(n.table_number) === tNum && 
+                (gId === null || !n.group_id || parseInt(n.group_id) === gId)
+            )))
+
+            // Instantly open the print modal for the fiscal receipt!
+            setDocType('receipt_fiscal')
+            setSelectedPrintData(res.data)
+            setPrintModalOpen(true)
+
             setPayingOrder(null)
             setPayingGroup(null)
             setTip(0)
             setPaymentMethod('cash')
             loadOrders(token)
-            alert(`Plată înregistrată! Total: ${(getPaymentTotal() + (parseFloat(tip) || 0)).toFixed(2)} lei`)
         } catch (err) {
             console.error('Eroare plată:', err)
             alert('Eroare la înregistrarea plății!')
@@ -302,6 +372,36 @@ export default function WaiterPage() {
                 <h1 className="page-title" style={{ marginBottom: 0 }}>Ospătar</h1>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                     <span style={{ fontSize: 15, color: '#475569', fontWeight: '600' }}>👤 {username}</span>
+                    <button 
+                        onClick={async () => {
+                            try {
+                                const res = await api.get('/payments/recent/', { headers: { Authorization: `Bearer ${token}` } })
+                                setRecentPayments(res.data)
+                                setShowPaymentsHistory(true)
+                            } catch (err) {
+                                alert('Eroare la încărcarea istoricului plăților!')
+                            }
+                        }}
+                        style={{ 
+                            padding: '8px 16px', 
+                            background: 'linear-gradient(135deg, #4f46e5, #4338ca)', 
+                            color: 'white', 
+                            fontSize: '13px', 
+                            fontWeight: '700',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            border: 'none',
+                            boxShadow: '0 2px 4px rgba(79, 70, 229, 0.25)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            transition: 'all 0.2s'
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.filter = 'brightness(1.1)'}
+                        onMouseLeave={e => e.currentTarget.style.filter = 'brightness(1.0)'}
+                    >
+                        📜 Istoric Plăți / Reprint
+                    </button>
                     <button className="logout-btn" onClick={logout}>Logout</button>
                 </div>
             </div>
@@ -313,6 +413,8 @@ export default function WaiterPage() {
                             <div className="notif-text">
                                 {n.type === 'item_ready'
                                     ? `✅ ${n.product_name} — Masa ${n.table_number} e gata!`
+                                    : n.type === 'bill_requested'
+                                    ? `💳 Masa ${n.table_number} (${n.group_name || 'Toată masa'}) cere NOTA (${n.payment_method === 'cash' ? 'Cash' : n.payment_method === 'card' ? 'Card' : 'Tichet'}) cu bacșiș ${n.tip} lei!`
                                     : `🔔 Masa ${n.table_number} cere asistență`
                                 }
                             </div>
@@ -320,6 +422,24 @@ export default function WaiterPage() {
                                 {n.type === 'item_ready' && (
                                     <button className="btn-primary" style={{ padding: '6px 12px' }} onClick={() => markServed(n.item_id)}>
                                         Servit
+                                    </button>
+                                )}
+                                {n.type === 'bill_requested' && (
+                                    <button 
+                                        className="btn-primary" 
+                                        style={{ padding: '6px 12px', background: '#10b981', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer', fontWeight: 'bold' }} 
+                                        onClick={() => {
+                                            const tableOrder = getTableOrder(parseInt(n.table_number));
+                                            if (tableOrder) {
+                                                const groupObj = n.group_id ? tableOrder.groups?.find(g => g.id === parseInt(n.group_id)) : null;
+                                                openPayment(tableOrder, groupObj, n.payment_method, n.tip);
+                                            } else {
+                                                alert('Această masă a fost deja încasată sau nu are o comandă activă.');
+                                                dismissNotification(idx);
+                                            }
+                                        }}
+                                    >
+                                        Încasează
                                     </button>
                                 )}
                                 <button className="logout-btn" style={{ padding: '6px 12px' }} onClick={() => dismissNotification(idx)}>
@@ -367,8 +487,30 @@ export default function WaiterPage() {
                                 <div className="empty-state" style={{ border: 'none', padding: '40px 0', margin: 0 }}>Masă liberă — nicio comandă activă</div>
                             ) : (
                                 <>
-                                    <div style={{ fontSize: 14, color: '#64748b', marginBottom: 24, fontWeight: '500' }}>
-                                        Comandă din {new Date(selectedOrder.created_at).toLocaleTimeString()}
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, gap: '16px' }}>
+                                        <div style={{ fontSize: 14, color: '#64748b', fontWeight: '500' }}>
+                                            Comandă din {new Date(selectedOrder.created_at).toLocaleTimeString()}
+                                        </div>
+                                        <button 
+                                            onClick={() => {
+                                                setDocType('receipt_command');
+                                                setSelectedPrintData(selectedOrder);
+                                                setPrintModalOpen(true);
+                                            }}
+                                            style={{ 
+                                                background: '#3b82f6', 
+                                                color: 'white', 
+                                                border: 'none', 
+                                                padding: '6px 12px', 
+                                                borderRadius: '8px', 
+                                                fontSize: '13px', 
+                                                fontWeight: '700', 
+                                                cursor: 'pointer',
+                                                boxShadow: '0 2px 4px rgba(59, 130, 246, 0.25)'
+                                            }}
+                                        >
+                                            📋 Bon Comandă
+                                        </button>
                                     </div>
 
                                     {selectedOrder.groups && selectedOrder.groups.length > 0 ? (
@@ -541,6 +683,77 @@ export default function WaiterPage() {
                     </div>
                 </div>
             )}
+            {showPaymentsHistory && (
+                <div className="modal-overlay" style={{ zIndex: 1200 }}>
+                    <div className="modal-content" style={{ maxWidth: '600px', width: '90%' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <h2 style={{ fontSize: 22, fontWeight: '800', margin: 0, color: '#0f172a' }}>📜 Istoric Plăți Recente</h2>
+                            <button 
+                                onClick={() => setShowPaymentsHistory(false)} 
+                                style={{ background: 'transparent', border: 'none', fontSize: '24px', cursor: 'pointer', color: '#94a3b8' }}
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <p style={{ margin: '0 0 16px 0', fontSize: '14px', color: '#64748b' }}>
+                            Aici găsești ultimele 50 de plăți înregistrate pe platformă. Poți tipări din nou orice bon fiscal:
+                        </p>
+                        <div style={{ maxHeight: '400px', overflowY: 'auto', display: 'grid', gap: '12px', paddingRight: '4px' }}>
+                            {recentPayments.length === 0 ? (
+                                <div style={{ textAlign: 'center', padding: '30px', color: '#94a3b8', fontSize: '14px' }}>Nicio plată înregistrată recent.</div>
+                            ) : (
+                                recentPayments.map(pay => {
+                                    const payDate = new Date(pay.created_at);
+                                    const formattedPayDate = `${payDate.toLocaleDateString('ro-RO')} ${payDate.toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' })}`;
+                                    const payMethodLabel = pay.method === 'cash' ? '💵 Numerar' : pay.method === 'card' ? '💳 Card' : '🎟️ Tichet';
+                                    
+                                    return (
+                                        <div key={pay.id} style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' }}>
+                                            <div style={{ fontSize: '14px' }}>
+                                                <div style={{ fontWeight: '700', color: '#0f172a' }}>Bon Fiscal #{pay.id} • Masa {pay.order_details?.table_number || '?'}</div>
+                                                <div style={{ fontSize: '12px', color: '#64748b', marginTop: '4px' }}>
+                                                    {formattedPayDate} • {payMethodLabel}
+                                                </div>
+                                                <div style={{ fontSize: '13px', fontWeight: '600', color: '#4f46e5', marginTop: '6px' }}>
+                                                    Consumație: {parseFloat(pay.amount).toFixed(2)} lei {pay.tip > 0 && `(+ ${parseFloat(pay.tip).toFixed(2)} lei bacșiș)`}
+                                                </div>
+                                            </div>
+                                            <button
+                                                onClick={() => {
+                                                    setDocType('receipt_fiscal');
+                                                    setSelectedPrintData({ ...pay, is_copy: true });
+                                                    setPrintModalOpen(true);
+                                                }}
+                                                style={{
+                                                    background: '#10b981',
+                                                    color: 'white',
+                                                    border: 'none',
+                                                    padding: '8px 14px',
+                                                    borderRadius: '8px',
+                                                    fontSize: '13px',
+                                                    fontWeight: '700',
+                                                    cursor: 'pointer',
+                                                    boxShadow: '0 2px 4px rgba(16, 185, 129, 0.25)',
+                                                    whiteSpace: 'nowrap'
+                                                }}
+                                            >
+                                                🖨️ Reprint
+                                            </button>
+                                        </div>
+                                    )
+                                })
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            <DocumentPrintModal
+                isOpen={printModalOpen}
+                onClose={() => { setPrintModalOpen(false); setSelectedPrintData(null); }}
+                documentType={docType}
+                data={selectedPrintData}
+            />
         </div>
     )
 }

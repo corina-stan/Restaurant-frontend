@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import api from '../api/axios'
 import '../DesktopLayout.css'
+import DocumentPrintModal from '../components/DocumentPrintModal'
 
 export default function AdminPage() {
     const [loggedIn, setLoggedIn] = useState(false)
@@ -14,6 +15,11 @@ export default function AdminPage() {
     const [loading, setLoading] = useState(false)
     
     const [activeTab, setActiveTab] = useState('menu')
+
+    // Print & Edit NIR state
+    const [printModalOpen, setPrintModalOpen] = useState(false)
+    const [selectedPrintInvoice, setSelectedPrintInvoice] = useState(null)
+    const [editingInvoiceId, setEditingInvoiceId] = useState(null)
 
     // Editing & Creation state
     const [editingProduct, setEditingProduct] = useState(null)
@@ -444,6 +450,29 @@ export default function AdminPage() {
         setInvoiceLine({ ingredientName: '', quantity: '', unit_price_without_vat: '', vat_rate: invoiceLine.vat_rate })
     }
 
+    const startEditingInvoice = (inv) => {
+        setEditingInvoiceId(inv.id)
+        setNewInvoice({
+            invoice_number: inv.invoice_number,
+            supplier_name: inv.supplier_name,
+            supplier_id: inv.supplier?.id || null,
+            date: inv.date
+        })
+        setSupplierSearchQuery(inv.supplier_name)
+        
+        setNewInvoiceItems(inv.items.map(item => ({
+            ingredient: item.ingredient?.id || item.ingredient,
+            ingredient_name: item.ingredient_name || item.ingredient?.name,
+            ingredient_unit: item.ingredient_unit || item.ingredient?.unit_of_measure || 'buc',
+            quantity: item.quantity,
+            unit_price_without_vat: item.unit_price_without_vat,
+            vat_rate: item.vat_rate
+        })))
+        
+        setShowNewInvoiceForm(true)
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+    }
+
     const submitInvoice = async () => {
         if (!newInvoice.invoice_number || !newInvoice.supplier_name || !newInvoice.date) {
             alert('Completează datele facturii (număr, furnizor, data)!')
@@ -456,17 +485,30 @@ export default function AdminPage() {
 
         try {
             const payload = { ...newInvoice, items: newInvoiceItems }
-            const res = await api.post('/menu/purchase_invoices/', payload, { headers: { Authorization: `Bearer ${token}` } })
+            let res;
+            if (editingInvoiceId) {
+                res = await api.put(`/menu/purchase_invoices/${editingInvoiceId}/`, payload, { headers: { Authorization: `Bearer ${token}` } })
+                setInvoices(prev => prev.map(inv => inv.id === editingInvoiceId ? res.data : inv))
+                alert('Factura a fost modificată cu succes!')
+            } else {
+                res = await api.post('/menu/purchase_invoices/', payload, { headers: { Authorization: `Bearer ${token}` } })
+                setInvoices([res.data, ...invoices])
+                
+                // Open print modal on the spot!
+                setSelectedPrintInvoice(res.data)
+                setPrintModalOpen(true)
+            }
             
-            setInvoices([res.data, ...invoices])
             const ingRes = await api.get('/menu/ingredients/', { headers: { Authorization: `Bearer ${token}` } })
             setIngredients(ingRes.data)
             
             setShowNewInvoiceForm(false)
+            setEditingInvoiceId(null)
             setNewInvoice({ invoice_number: '', supplier_name: '', supplier_id: null, date: new Date().toISOString().split('T')[0] })
             setSupplierSearchQuery('')
             setNewInvoiceItems([])
         } catch (err) {
+            console.error(err)
             alert('Eroare la salvarea facturii.')
         }
     }
@@ -803,9 +845,22 @@ export default function AdminPage() {
                         )}
 
                         {showNewInvoiceForm && (
-                            <div style={{ background: '#ffffff', padding: '24px', borderRadius: '16px', marginBottom: '32px', border: '1px solid #e2e8f0', borderLeft: '4px solid #22c55e', position: 'relative' }}>
-                                <button onClick={() => setShowNewInvoiceForm(false)} style={{ position: 'absolute', top: '24px', right: '24px', background: 'transparent', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#94a3b8', padding: '0' }}>✕</button>
-                                <h3 style={{ marginTop: 0, marginBottom: '20px', fontSize: '18px', paddingRight: '24px' }}>Recepție Marfă (Adaugă Factură / NIR)</h3>
+                            <div style={{ background: '#ffffff', padding: '24px', borderRadius: '16px', marginBottom: '32px', border: '1px solid #e2e8f0', borderLeft: editingInvoiceId ? '4px solid #f59e0b' : '4px solid #22c55e', position: 'relative' }}>
+                                <button 
+                                    onClick={() => {
+                                        setShowNewInvoiceForm(false);
+                                        setEditingInvoiceId(null);
+                                        setNewInvoice({ invoice_number: '', supplier_name: '', supplier_id: null, date: new Date().toISOString().split('T')[0] });
+                                        setSupplierSearchQuery('');
+                                        setNewInvoiceItems([]);
+                                    }} 
+                                    style={{ position: 'absolute', top: '24px', right: '24px', background: 'transparent', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#94a3b8', padding: '0' }}
+                                >
+                                    ✕
+                                </button>
+                                <h3 style={{ marginTop: 0, marginBottom: '20px', fontSize: '18px', paddingRight: '24px', color: editingInvoiceId ? '#d97706' : '#1e293b' }}>
+                                    {editingInvoiceId ? `✏️ Modificare Factură (NIR: ${newInvoice.invoice_number})` : 'Recepție Marfă (Adaugă Factură / NIR)'}
+                                </h3>
                                 
                                 {/* Invoice Header */}
                                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px', marginBottom: '24px' }}>
@@ -1097,8 +1152,21 @@ export default function AdminPage() {
                                 )}
 
                                 <div style={{ textAlign: 'right', borderTop: '2px solid #f1f5f9', paddingTop: '20px' }}>
-                                    <button onClick={submitInvoice} style={{ background: '#22c55e', color: 'white', border: 'none', padding: '14px 32px', borderRadius: '12px', fontWeight: '700', fontSize: '16px', cursor: 'pointer', boxShadow: '0 4px 6px -1px rgba(34, 197, 94, 0.4)' }}>
-                                        Finalizează și Salvează Factura
+                                    <button 
+                                        onClick={submitInvoice} 
+                                        style={{ 
+                                            background: editingInvoiceId ? '#f59e0b' : '#22c55e', 
+                                            color: 'white', 
+                                            border: 'none', 
+                                            padding: '14px 32px', 
+                                            borderRadius: '12px', 
+                                            fontWeight: '700', 
+                                            fontSize: '16px', 
+                                            cursor: 'pointer', 
+                                            boxShadow: editingInvoiceId ? '0 4px 6px -1px rgba(245, 158, 11, 0.4)' : '0 4px 6px -1px rgba(34, 197, 94, 0.4)' 
+                                        }}
+                                    >
+                                        {editingInvoiceId ? 'Salvează Modificările Facturii' : 'Finalizează și Salvează Factura'}
                                     </button>
                                 </div>
                             </div>
@@ -1234,7 +1302,7 @@ export default function AdminPage() {
                                                     onMouseLeave={e => e.currentTarget.style.background = '#f8fafc'}
                                                 >
                                                     <div>
-                                                        <div style={{ fontWeight: '700', color: '#0f172a', fontSize: '15px' }}>Factura: {inv.invoice_number}</div>
+                                                        <div style={{ fontWeight: '700', color: '#0f172a', fontSize: '15px' }}>{inv.nir_number ? `NIR #${inv.nir_number}` : 'NIR -'} (Factura: {inv.invoice_number})</div>
                                                         <div style={{ fontSize: '13px', color: '#64748b', marginTop: '2px' }}>Furnizor: {inv.supplier_name}</div>
                                                     </div>
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -1260,6 +1328,53 @@ export default function AdminPage() {
                                                 </div>
                                                 {isExpanded && (
                                                     <div style={{ padding: '16px', background: '#ffffff' }}>
+                                                        <div style={{ display: 'flex', gap: '12px', marginBottom: '16px' }}>
+                                                            <button 
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setSelectedPrintInvoice(inv);
+                                                                    setPrintModalOpen(true);
+                                                                }}
+                                                                style={{ 
+                                                                    display: 'inline-flex', 
+                                                                    alignItems: 'center', 
+                                                                    gap: '6px', 
+                                                                    background: '#3b82f6', 
+                                                                    color: 'white', 
+                                                                    border: 'none', 
+                                                                    padding: '8px 16px', 
+                                                                    borderRadius: '8px', 
+                                                                    fontWeight: '600', 
+                                                                    fontSize: '13px', 
+                                                                    cursor: 'pointer',
+                                                                    boxShadow: '0 2px 4px rgba(59, 130, 246, 0.25)'
+                                                                }}
+                                                            >
+                                                                📄 Previzualizare & Tipărire NIR (PDF)
+                                                            </button>
+                                                            <button 
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    startEditingInvoice(inv);
+                                                                }}
+                                                                style={{ 
+                                                                    display: 'inline-flex', 
+                                                                    alignItems: 'center', 
+                                                                    gap: '6px', 
+                                                                    background: '#f59e0b', 
+                                                                    color: 'white', 
+                                                                    border: 'none', 
+                                                                    padding: '8px 16px', 
+                                                                    borderRadius: '8px', 
+                                                                    fontWeight: '600', 
+                                                                    fontSize: '13px', 
+                                                                    cursor: 'pointer',
+                                                                    boxShadow: '0 2px 4px rgba(245, 158, 11, 0.25)'
+                                                                }}
+                                                            >
+                                                                ✏️ Editează Factura
+                                                            </button>
+                                                        </div>
                                                         {inv.supplier && (
                                                             <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '10px 14px', marginBottom: '14px', fontSize: '12px', color: '#475569' }}>
                                                                 <div style={{ fontWeight: '700', color: '#1e293b', marginBottom: '4px' }}>🏢 Detalii Furnizor: {inv.supplier.name}</div>
@@ -1543,6 +1658,13 @@ export default function AdminPage() {
                     </>
                 ) : null}
             </div>
+
+            <DocumentPrintModal
+                isOpen={printModalOpen}
+                onClose={() => { setPrintModalOpen(false); setSelectedPrintInvoice(null); }}
+                documentType="invoice_nir"
+                data={selectedPrintInvoice}
+            />
         </div>
     )
 }

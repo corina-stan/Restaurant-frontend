@@ -16,35 +16,35 @@ export default function KitchenPage() {
                 headers: { Authorization: `Bearer ${accessToken}` }
             })
             const kitchenOrders = {}
+            const newSeenIds = new Set()
             ordersRes.data.forEach(order => {
                 order.items.forEach(item => {
                     if (
                         item.product.category.department === 'kitchen' &&
                         ['pending', 'in_progress'].includes(item.status)
                     ) {
-                        if (!seenIds.current.has(item.id)) {
-                            seenIds.current.add(item.id)
-                            if (!kitchenOrders[order.id]) {
-                                kitchenOrders[order.id] = {
-                                    order_id: order.id,
-                                    table_number: order.table_number,
-                                    timestamp: order.created_at,
-                                    items: []
-                                }
+                        newSeenIds.add(item.id)
+                        if (!kitchenOrders[order.id]) {
+                            kitchenOrders[order.id] = {
+                                order_id: order.id,
+                                table_number: order.table_number,
+                                timestamp: order.created_at,
+                                items: []
                             }
-                            kitchenOrders[order.id].items.push({
-                                item_id: item.id,
-                                product_name: item.product.name,
-                                quantity: item.quantity,
-                                notes: item.notes || ''
-                            })
                         }
+                        kitchenOrders[order.id].items.push({
+                            item_id: item.id,
+                            product_name: item.product.name,
+                            quantity: item.quantity,
+                            notes: item.notes || ''
+                        })
                     }
                 })
             })
+            seenIds.current = newSeenIds
             setOrders(kitchenOrders)
         } catch (err) {
-            localStorage.removeItem('kitchen_token')
+            sessionStorage.removeItem('kitchen_token')
             setLoggedIn(false)
         }
     }
@@ -85,8 +85,11 @@ export default function KitchenPage() {
         seenIds.current = new Set()
     }
 
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsHost = window.location.host;
+
     useWebSocket(
-        'ws://localhost:5173/ws/kitchen/',
+        `${wsProtocol}//${wsHost}/ws/kitchen/`,
         (data) => {
             if (data.type === 'new_order_item') {
                 if (seenIds.current.has(data.item_id)) return

@@ -16,30 +16,30 @@ export default function BarPage() {
                 headers: { Authorization: `Bearer ${accessToken}` }
             })
             const barItems = []
+            const newSeenIds = new Set()
             ordersRes.data.forEach(order => {
                 order.items.forEach(item => {
                     if (
                         item.product.category.department === 'bar' &&
                         ['pending', 'in_progress'].includes(item.status)
                     ) {
-                        if (!seenIds.current.has(item.id)) {
-                            seenIds.current.add(item.id)
-                            barItems.push({
-                                item_id: item.id,
-                                product_id: item.product.id,
-                                product_name: item.product.name,
-                                quantity: item.quantity,
-                                table_number: order.table_number,
-                                notes: item.notes || '',
-                                timestamp: order.created_at
-                            })
-                        }
+                        newSeenIds.add(item.id)
+                        barItems.push({
+                            item_id: item.id,
+                            product_id: item.product.id,
+                            product_name: item.product.name,
+                            quantity: item.quantity,
+                            table_number: order.table_number,
+                            notes: item.notes || '',
+                            timestamp: order.created_at
+                        })
                     }
                 })
             })
+            seenIds.current = newSeenIds
             setItems(barItems)
         } catch (err) {
-            localStorage.removeItem('bar_token')
+            sessionStorage.removeItem('bar_token')
             setLoggedIn(false)
         }
     }
@@ -80,8 +80,11 @@ export default function BarPage() {
         seenIds.current = new Set()
     }
 
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsHost = window.location.host;
+
     useWebSocket(
-        'ws://localhost:5173/ws/bar/',
+        `${wsProtocol}//${wsHost}/ws/bar/`,
         (data) => {
             if (data.type === 'new_order_item') {
                 if (seenIds.current.has(data.item_id)) return
