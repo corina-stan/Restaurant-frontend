@@ -37,42 +37,389 @@ export default function DocumentPrintModal({ isOpen, onClose, documentType, data
     return dept === 'bar' ? 21 : 11;
   };
 
-  const renderCommandReceipt = (isPrintWrapper = false) => {
-    const order = data.order_details || data; // handle payment object or direct order
-    const items = (data.items || order.items || []).filter(i => i.status !== 'rejected');
-    const tableNumber = order.table_number || order.session?.table?.number || '?';
-    const waiterName = data.collected_by_username || sessionStorage.getItem('waiter_username') || 'Sistem';
-    const dateStr = new Date(order.created_at || Date.now()).toLocaleString('ro-RO');
+  const renderZReport = (isPrintWrapper = false) => {
+    const report = data;
+    const waiterName = report.waiter_username || sessionStorage.getItem('waiter_username') || 'Sistem';
+    const dateStr = new Date(report.created_at || Date.now()).toLocaleString('ro-RO');
+    
+    const cashTotal = parseFloat(report.cash_amount || 0);
+    const cardTotal = parseFloat(report.card_amount || 0);
+    const ticketTotal = parseFloat(report.ticket_amount || 0);
+    const totalSales = parseFloat(report.total_amount || 0);
+    
+    const cashTip = parseFloat(report.cash_tip || 0);
+    const cardTip = parseFloat(report.card_tip || 0);
+    const ticketTip = parseFloat(report.ticket_tip || 0);
+    const tipTotal = parseFloat(report.total_tip || 0);
+    
+    const cashGrand = cashTotal + cashTip;
+    const cardGrand = cardTotal + cardTip;
+    const ticketGrand = ticketTotal + ticketTip;
+    const grandTotal = totalSales + tipTotal;
+
+    const vat11Gross = parseFloat(report.vat_11_gross || 0);
+    const vat11Net = parseFloat(report.vat_11_net || 0);
+    const vat11Amount = parseFloat(report.vat_11_amount || 0);
+
+    const vat21Gross = parseFloat(report.vat_21_gross || 0);
+    const vat21Net = parseFloat(report.vat_21_net || 0);
+    const vat21Amount = parseFloat(report.vat_21_amount || 0);
+
+    const totalVat = vat11Amount + vat21Amount;
 
     return (
       <div className="receipt-thermal">
-        <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '13px' }}>
-          *** BON DE COMANDĂ ***
+        <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '12px' }}>
+          RESTAURANT PLATFORM S.R.L.
+        </div>
+        <div style={{ textAlign: 'center', fontSize: '8.5pt' }}>
+          Str. Principala Nr. 10, Cluj-Napoca
+        </div>
+        <div style={{ textAlign: 'center', fontSize: '8.5pt' }}>
+          C.U.I.: RO987654321
         </div>
         <div className="dashed-line" />
-        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <span>MASA: {tableNumber}</span>
-          <span>COMANDA: #{order.id}</span>
+        <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '12px', margin: '4px 0' }}>
+          *** RAPORT Z (ÎNCHIDERE TURĂ) ***
         </div>
-        <div>DATA: {dateStr}</div>
-        <div>OSPATAR: {waiterName}</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
+          <span>RAPORT NR: {report.number ? report.number.toString().padStart(4, '0') : '0000'}</span>
+          <span>SERIA: ZR{(report.number || 0).toString().padStart(6, '0')}</span>
+        </div>
+        <div>OPERATOR: {waiterName}</div>
+        <div>DATA ÎNCHIDERII: {dateStr}</div>
         <div className="dashed-line" />
-        <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>PRODUSE:</div>
-        {items.map((item, idx) => (
-          <div key={item.id || idx} style={{ marginBottom: '6px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold' }}>
-              <span>{item.quantity} x {item.product?.name || item.product_name}</span>
-            </div>
-            {item.notes && (
-              <div style={{ fontSize: '8.5pt', fontStyle: 'italic', paddingLeft: '8px' }}>
-                * {item.notes}
-              </div>
-            )}
+        
+        {/* 1. VALOARE ÎNCASĂRI (EXCL. BACȘIȘ) */}
+        <div style={{ fontWeight: 'bold', marginBottom: '6px', textDecoration: 'underline' }}>SUMAR ÎNCASĂRI (EXCL. BACȘIȘ):</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+          <span>NUMERAR (CASH):</span>
+          <span style={{ fontWeight: '600' }}>{cashTotal.toFixed(2)} lei</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+          <span>CARD:</span>
+          <span style={{ fontWeight: '600' }}>{cardTotal.toFixed(2)} lei</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+          <span>TICHETE:</span>
+          <span style={{ fontWeight: '600' }}>{ticketTotal.toFixed(2)} lei</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', borderTop: '1px dashed #000', paddingTop: '2px', marginTop: '4px' }}>
+          <span>TOTAL ÎNCASĂRI (FĂRĂ TIPS):</span>
+          <span>{totalSales.toFixed(2)} lei</span>
+        </div>
+
+        <div className="dashed-line" />
+        
+        {/* 2. DEFALCARE BACȘIȘ (TIP) */}
+        <div style={{ fontWeight: 'bold', marginBottom: '6px', textDecoration: 'underline' }}>DEFALCARE BACȘIȘ (TIP):</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+          <span>BACȘIȘ NUMERAR (CASH):</span>
+          <span>{cashTip.toFixed(2)} lei</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+          <span>BACȘIȘ CARD:</span>
+          <span>{cardTip.toFixed(2)} lei</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+          <span>BACȘIȘ TICHETE:</span>
+          <span>{ticketTip.toFixed(2)} lei</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', borderTop: '1px dashed #000', paddingTop: '2px', marginTop: '4px' }}>
+          <span>TOTAL BACȘIȘ:</span>
+          <span>{tipTotal.toFixed(2)} lei</span>
+        </div>
+
+        <div className="dashed-line" />
+        
+        {/* 3. TOTAL GENERAL (INCLUSIV BACȘIȘ) */}
+        <div style={{ fontWeight: 'bold', marginBottom: '6px', textDecoration: 'underline' }}>TOTAL GENERAL (INCLUSIV BACȘIȘ):</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+          <span>TOTAL NUMERAR (CASH + BACȘIȘ):</span>
+          <span>{cashGrand.toFixed(2)} lei</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+          <span>TOTAL CARD (CARD + BACȘIȘ):</span>
+          <span>{cardGrand.toFixed(2)} lei</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+          <span>TOTAL TICHETE (TICHET + BACȘIȘ):</span>
+          <span>{ticketGrand.toFixed(2)} lei</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', borderTop: '1px dashed #000', paddingTop: '2px', marginTop: '4px' }}>
+          <span>TOTAL GENERAL ÎNCASAT:</span>
+          <span>{grandTotal.toFixed(2)} lei</span>
+        </div>
+
+        <div className="dashed-line" />
+        
+        {/* 4. DEFALCARE COTE TVA */}
+        <div style={{ fontWeight: 'bold', marginBottom: '6px', textDecoration: 'underline' }}>DEFALCARE COTE TVA (EXCL. TIPS):</div>
+        
+        {/* TVA A - 11% */}
+        <div style={{ marginBottom: '8px' }}>
+          <div style={{ fontWeight: 'bold', fontSize: '9pt' }}>TVA A (11.00%):</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8.5pt', paddingLeft: '6px' }}>
+            <span>VALOARE FĂRĂ TVA (NET):</span>
+            <span>{vat11Net.toFixed(2)} lei</span>
           </div>
-        ))}
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8.5pt', paddingLeft: '6px' }}>
+            <span>VALOARE TVA:</span>
+            <span>{vat11Amount.toFixed(2)} lei</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8.5pt', paddingLeft: '6px', fontWeight: '600' }}>
+            <span>TOTAL CU TVA (BRUT):</span>
+            <span>{vat11Gross.toFixed(2)} lei</span>
+          </div>
+        </div>
+
+        {/* TVA B - 21% */}
+        <div style={{ marginBottom: '8px' }}>
+          <div style={{ fontWeight: 'bold', fontSize: '9pt' }}>TVA B (21.00%):</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8.5pt', paddingLeft: '6px' }}>
+            <span>VALOARE FĂRĂ TVA (NET):</span>
+            <span>{vat21Net.toFixed(2)} lei</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8.5pt', paddingLeft: '6px' }}>
+            <span>VALOARE TVA:</span>
+            <span>{vat21Amount.toFixed(2)} lei</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8.5pt', paddingLeft: '6px', fontWeight: '600' }}>
+            <span>TOTAL CU TVA (BRUT):</span>
+            <span>{vat21Gross.toFixed(2)} lei</span>
+          </div>
+        </div>
+
+        <div style={{ borderTop: '1px dashed #000', paddingTop: '2px', marginTop: '6px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8.5pt' }}>
+            <span>TOTAL VALOARE FĂRĂ TVA (NET):</span>
+            <span>{(vat11Net + vat21Net).toFixed(2)} lei</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8.5pt' }}>
+            <span>TOTAL TVA COLECTAT:</span>
+            <span>{totalVat.toFixed(2)} lei</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '9pt', borderTop: '1px dotted #000', paddingTop: '2px', marginTop: '2px' }}>
+            <span>TOTAL VALOARE CU TVA (BRUT):</span>
+            <span>{(vat11Gross + vat21Gross).toFixed(2)} lei</span>
+          </div>
+        </div>
+
+        <div className="double-dashed-line" />
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span>NUMĂR TRANZACȚII:</span>
+          <span style={{ fontWeight: 'bold' }}>{report.payments_count}</span>
+        </div>
+
         <div className="dashed-line" />
-        <div style={{ textAlign: 'center', fontSize: '9pt', marginTop: '10px' }}>
-          -- DESTINAT PREPARĂRII --
+        <div style={{ textAlign: 'center', fontSize: '8.5pt', marginTop: '10px' }}>
+          CASA DE MARCAT: E12345678-0001
+        </div>
+        <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '11px', marginTop: '6px' }}>
+          *** SFÂRȘITUL RAPORTULUI Z ***
+        </div>
+      </div>
+    );
+  };
+
+  const renderXReport = (isPrintWrapper = false) => {
+    const report = data;
+    const waiterName = report.waiter_username || sessionStorage.getItem('waiter_username') || 'Sistem';
+    const dateStr = new Date(report.created_at || Date.now()).toLocaleString('ro-RO');
+    
+    const cashTotal = parseFloat(report.cash_amount || 0);
+    const cardTotal = parseFloat(report.card_amount || 0);
+    const ticketTotal = parseFloat(report.ticket_amount || 0);
+    const totalSales = parseFloat(report.total_amount || 0);
+    
+    const cashTip = parseFloat(report.cash_tip || 0);
+    const cardTip = parseFloat(report.card_tip || 0);
+    const ticketTip = parseFloat(report.ticket_tip || 0);
+    const tipTotal = parseFloat(report.total_tip || 0);
+    
+    const cashGrand = cashTotal + cashTip;
+    const cardGrand = cardTotal + cardTip;
+    const ticketGrand = ticketTotal + ticketTip;
+    const grandTotal = totalSales + tipTotal;
+
+    const vat11Gross = parseFloat(report.vat_11_gross || 0);
+    const vat11Net = parseFloat(report.vat_11_net || 0);
+    const vat11Amount = parseFloat(report.vat_11_amount || 0);
+
+    const vat21Gross = parseFloat(report.vat_21_gross || 0);
+    const vat21Net = parseFloat(report.vat_21_net || 0);
+    const vat21Amount = parseFloat(report.vat_21_amount || 0);
+
+    const totalVat = vat11Amount + vat21Amount;
+    const payments = report.payments || [];
+
+    return (
+      <div className="receipt-thermal">
+        <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '12px' }}>
+          RESTAURANT PLATFORM S.R.L.
+        </div>
+        <div style={{ textAlign: 'center', fontSize: '8.5pt' }}>
+          Str. Principala Nr. 10, Cluj-Napoca
+        </div>
+        <div style={{ textAlign: 'center', fontSize: '8.5pt' }}>
+          C.U.I.: RO987654321
+        </div>
+        <div className="dashed-line" />
+        <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '12px', margin: '4px 0' }}>
+          *** RAPORT X (INFORMATIV) ***
+        </div>
+        <div>OPERATOR: {waiterName}</div>
+        <div>DATA GENERĂRII: {dateStr}</div>
+        <div className="dashed-line" />
+        
+        {/* 1. VALOARE ÎNCASĂRI (EXCL. BACȘIȘ) */}
+        <div style={{ fontWeight: 'bold', marginBottom: '6px', textDecoration: 'underline' }}>SUMAR ÎNCASĂRI (EXCL. BACȘIȘ):</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+          <span>NUMERAR (CASH):</span>
+          <span style={{ fontWeight: '600' }}>{cashTotal.toFixed(2)} lei</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+          <span>CARD:</span>
+          <span style={{ fontWeight: '600' }}>{cardTotal.toFixed(2)} lei</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+          <span>TICHETE:</span>
+          <span style={{ fontWeight: '600' }}>{ticketTotal.toFixed(2)} lei</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', borderTop: '1px dashed #000', paddingTop: '2px', marginTop: '4px' }}>
+          <span>TOTAL ÎNCASĂRI (FĂRĂ TIPS):</span>
+          <span>{totalSales.toFixed(2)} lei</span>
+        </div>
+
+        <div className="dashed-line" />
+        
+        {/* 2. DEFALCARE BACȘIȘ (TIP) */}
+        <div style={{ fontWeight: 'bold', marginBottom: '6px', textDecoration: 'underline' }}>DEFALCARE BACȘIȘ (TIP):</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+          <span>BACȘIȘ NUMERAR (CASH):</span>
+          <span>{cashTip.toFixed(2)} lei</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+          <span>BACȘIȘ CARD:</span>
+          <span>{cardTip.toFixed(2)} lei</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+          <span>BACȘIȘ TICHETE:</span>
+          <span>{ticketTip.toFixed(2)} lei</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', borderTop: '1px dashed #000', paddingTop: '2px', marginTop: '4px' }}>
+          <span>TOTAL BACȘIȘ:</span>
+          <span>{tipTotal.toFixed(2)} lei</span>
+        </div>
+
+        <div className="dashed-line" />
+        
+        {/* 3. TOTAL GENERAL (INCLUSIV BACȘIȘ) */}
+        <div style={{ fontWeight: 'bold', marginBottom: '6px', textDecoration: 'underline' }}>TOTAL GENERAL (INCLUSIV BACȘIȘ):</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+          <span>TOTAL NUMERAR (CASH + BACȘIȘ):</span>
+          <span>{cashGrand.toFixed(2)} lei</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+          <span>TOTAL CARD (CARD + BACȘIȘ):</span>
+          <span>{cardGrand.toFixed(2)} lei</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+          <span>TOTAL TICHETE (TICHET + BACȘIȘ):</span>
+          <span>{ticketGrand.toFixed(2)} lei</span>
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', borderTop: '1px dashed #000', paddingTop: '2px', marginTop: '4px' }}>
+          <span>TOTAL GENERAL ÎNCASAT:</span>
+          <span>{grandTotal.toFixed(2)} lei</span>
+        </div>
+
+        <div className="dashed-line" />
+        
+        {/* 4. DEFALCARE COTE TVA */}
+        <div style={{ fontWeight: 'bold', marginBottom: '6px', textDecoration: 'underline' }}>DEFALCARE COTE TVA (EXCL. TIPS):</div>
+        
+        {/* TVA A - 11% */}
+        <div style={{ marginBottom: '8px' }}>
+          <div style={{ fontWeight: 'bold', fontSize: '9pt' }}>TVA A (11.00%):</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8.5pt', paddingLeft: '6px' }}>
+            <span>VALOARE FĂRĂ TVA (NET):</span>
+            <span>{vat11Net.toFixed(2)} lei</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8.5pt', paddingLeft: '6px' }}>
+            <span>VALOARE TVA:</span>
+            <span>{vat11Amount.toFixed(2)} lei</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8.5pt', paddingLeft: '6px', fontWeight: '600' }}>
+            <span>TOTAL CU TVA (BRUT):</span>
+            <span>{vat11Gross.toFixed(2)} lei</span>
+          </div>
+        </div>
+
+        {/* TVA B - 21% */}
+        <div style={{ marginBottom: '8px' }}>
+          <div style={{ fontWeight: 'bold', fontSize: '9pt' }}>TVA B (21.00%):</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8.5pt', paddingLeft: '6px' }}>
+            <span>VALOARE FĂRĂ TVA (NET):</span>
+            <span>{vat21Net.toFixed(2)} lei</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8.5pt', paddingLeft: '6px' }}>
+            <span>VALOARE TVA:</span>
+            <span>{vat21Amount.toFixed(2)} lei</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8.5pt', paddingLeft: '6px', fontWeight: '600' }}>
+            <span>TOTAL CU TVA (BRUT):</span>
+            <span>{vat21Gross.toFixed(2)} lei</span>
+          </div>
+        </div>
+
+        <div style={{ borderTop: '1px dashed #000', paddingTop: '2px', marginTop: '6px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8.5pt' }}>
+            <span>TOTAL VALOARE FĂRĂ TVA (NET):</span>
+            <span>{(vat11Net + vat21Net).toFixed(2)} lei</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '8.5pt' }}>
+            <span>TOTAL TVA COLECTAT:</span>
+            <span>{totalVat.toFixed(2)} lei</span>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 'bold', fontSize: '9pt', borderTop: '1px dotted #000', paddingTop: '2px', marginTop: '2px' }}>
+            <span>TOTAL VALOARE CU TVA (BRUT):</span>
+            <span>{(vat11Gross + vat21Gross).toFixed(2)} lei</span>
+          </div>
+        </div>
+
+        <div className="double-dashed-line" />
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span>NUMĂR TRANZACȚII:</span>
+          <span style={{ fontWeight: 'bold' }}>{report.payments_count}</span>
+        </div>
+
+        {report.isDetailed && payments.length > 0 && (
+          <>
+            <div className="dashed-line" />
+            <div style={{ fontWeight: 'bold', marginBottom: '6px', textDecoration: 'underline', fontSize: '9pt' }}>
+              DETALIU TRANZACȚII ACTIVE:
+            </div>
+            {payments.map((p, idx) => (
+              <div key={p.id || idx} style={{ fontSize: '8.5pt', marginBottom: '6px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: '600' }}>
+                  <span>Plată #{p.id} (Masa {p.order_details?.table_number || '?'})</span>
+                  <span>{(parseFloat(p.amount) + parseFloat(p.tip)).toFixed(2)} lei</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', color: '#555555', paddingLeft: '4px' }}>
+                  <span>{p.method === 'cash' ? 'Cash' : p.method === 'card' ? 'Card' : 'Tichet'} (cons: {parseFloat(p.amount).toFixed(2)} | tip: {parseFloat(p.tip).toFixed(2)})</span>
+                  <span>{new Date(p.created_at).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' })}</span>
+                </div>
+              </div>
+            ))}
+          </>
+        )}
+
+        <div className="dashed-line" />
+        <div style={{ textAlign: 'center', fontSize: '8.5pt', marginTop: '10px' }}>
+          CASA DE MARCAT: E12345678-0001
+        </div>
+        <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '11px', marginTop: '6px' }}>
+          *** RAPORT X - EXCLUSIV PENTRU INFORMARE ***
         </div>
       </div>
     );
@@ -358,12 +705,14 @@ export default function DocumentPrintModal({ isOpen, onClose, documentType, data
 
   const renderContent = () => {
     switch (documentType) {
-      case 'receipt_command':
-        return renderCommandReceipt();
       case 'receipt_fiscal':
         return renderFiscalReceipt();
       case 'invoice_nir':
         return renderNIR();
+      case 'receipt_z':
+        return renderZReport();
+      case 'receipt_x':
+        return renderXReport();
       default:
         return null;
     }
@@ -371,12 +720,14 @@ export default function DocumentPrintModal({ isOpen, onClose, documentType, data
 
   const renderPrintContent = () => {
     switch (documentType) {
-      case 'receipt_command':
-        return renderCommandReceipt(true);
       case 'receipt_fiscal':
         return renderFiscalReceipt(true);
       case 'invoice_nir':
         return renderNIR(true);
+      case 'receipt_z':
+        return renderZReport(true);
+      case 'receipt_x':
+        return renderXReport(true);
       default:
         return null;
     }

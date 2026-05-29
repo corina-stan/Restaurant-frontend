@@ -3,9 +3,17 @@ import api from '../api/axios'
 import '../DesktopLayout.css'
 import DocumentPrintModal from '../components/DocumentPrintModal'
 
+const CHART_COLORS = [
+    { stroke: '#4f46e5', fill: 'rgba(79, 70, 229, 0.08)' }, // Indigo
+    { stroke: '#06b6d4', fill: 'rgba(6, 182, 212, 0.08)' }, // Cyan
+    { stroke: '#10b981', fill: 'rgba(16, 185, 129, 0.08)' }, // Emerald
+    { stroke: '#f59e0b', fill: 'rgba(245, 158, 11, 0.08)' }, // Amber
+    { stroke: '#ec4899', fill: 'rgba(236, 72, 153, 0.08)' }, // Pink
+    { stroke: '#8b5cf6', fill: 'rgba(139, 92, 246, 0.08)' }, // Violet
+]
+
 export default function AdminPage() {
     const [loggedIn, setLoggedIn] = useState(false)
-    const [credentials, setCredentials] = useState({ username: '', password: '' })
     const [token, setToken] = useState(null)
     const [products, setProducts] = useState([])
     const [categories, setCategories] = useState([])
@@ -134,6 +142,10 @@ export default function AdminPage() {
     const [reportChartType, setReportChartType] = useState('line') // line, bar
     const [reportPreset, setReportPreset] = useState('30d') // 7d, 30d, 90d, custom
     const [reportCustomDates, setReportCustomDates] = useState({ start: '', end: '' })
+    const [selectedCategories, setSelectedCategories] = useState([])
+    const [selectedProducts, setSelectedProducts] = useState([])
+    const [productSearchQuery, setProductSearchQuery] = useState('')
+    const [showProductDropdown, setShowProductDropdown] = useState(false)
 
     // Logs State
     const [logs, setLogs] = useState([])
@@ -170,41 +182,51 @@ export default function AdminPage() {
 
     useEffect(() => {
         const savedToken = sessionStorage.getItem('admin_token')
-        if (savedToken) {
+        if (!savedToken) {
+            window.location.href = '/login'
+        } else {
             setToken(savedToken)
             setLoggedIn(true)
             loadData(savedToken)
         }
     }, [])
 
-    const login = async () => {
-        try {
-            const res = await api.post('/token/', credentials)
-            const payload = JSON.parse(atob(res.data.access.split('.')[1]))
-
-            if (payload.role !== 'admin' && !payload.is_superuser) {
-                alert('Nu ai permisiunea de a accesa panoul de administrare!')
-                return
-            }
-
-            sessionStorage.setItem('admin_token', res.data.access)
-            setToken(res.data.access)
-            setLoggedIn(true)
-            await loadData(res.data.access)
-        } catch (err) {
-            alert('Username sau parolă greșite!')
-        }
-    }
-
     const logout = () => {
         sessionStorage.removeItem('admin_token')
-        setToken(null)
-        setLoggedIn(false)
-        setProducts([])
-        setUsers([])
-        setIngredients([])
-        setSuppliers([])
-        setInvoices([])
+        window.location.href = '/login'
+    }
+
+    const toggleCategory = (cat) => {
+        setSelectedCategories(prev => {
+            if (prev.includes(cat)) {
+                if (prev.length === 1) return prev
+                return prev.filter(c => c !== cat)
+            } else {
+                if (prev.length >= 5) {
+                    alert("Poți compara maxim 5 categorii simultan!")
+                    return prev
+                }
+                return [...prev, cat]
+            }
+        })
+    }
+
+    const addProduct = (prod) => {
+        setSelectedProducts(prev => {
+            if (prev.includes(prod)) return prev
+            if (prev.length >= 6) {
+                alert("Poți compara maxim 6 produse simultan!")
+                return prev
+            }
+            return [...prev, prod]
+        })
+    }
+
+    const removeProduct = (prod) => {
+        setSelectedProducts(prev => {
+            if (prev.length === 1) return prev
+            return prev.filter(p => p !== prod)
+        })
     }
 
 
@@ -270,6 +292,42 @@ export default function AdminPage() {
             loadLogsData()
         }
     }, [activeTab, reportPeriod, reportBreakdown, reportPreset, reportCustomDates, token])
+
+    useEffect(() => {
+        if (!reportData || !reportData.datasets || reportData.datasets.length === 0) return
+
+        if (reportBreakdown === 'category') {
+            const availableCategories = reportData.datasets.map(d => d.label)
+            const validSelected = selectedCategories.filter(cat => availableCategories.includes(cat))
+            
+            if (validSelected.length === 0 && availableCategories.length > 0) {
+                // Default to top category by total sales to prevent clutter while keeping graph populated
+                const sortedBySales = [...reportData.datasets].sort((a, b) => {
+                    const sumA = a.data ? a.data.reduce((x, y) => x + y, 0) : 0
+                    const sumB = b.data ? b.data.reduce((x, y) => x + y, 0) : 0
+                    return sumB - sumA
+                })
+                setSelectedCategories([sortedBySales[0].label])
+            } else {
+                setSelectedCategories(validSelected)
+            }
+        } else if (reportBreakdown === 'product') {
+            const availableProducts = reportData.datasets.map(d => d.label)
+            const validSelected = selectedProducts.filter(prod => availableProducts.includes(prod))
+            
+            if (validSelected.length === 0 && availableProducts.length > 0) {
+                // Default to top product by total sales
+                const sortedBySales = [...reportData.datasets].sort((a, b) => {
+                    const sumA = a.data ? a.data.reduce((x, y) => x + y, 0) : 0
+                    const sumB = b.data ? b.data.reduce((x, y) => x + y, 0) : 0
+                    return sumB - sumA
+                })
+                setSelectedProducts([sortedBySales[0].label])
+            } else {
+                setSelectedProducts(validSelected)
+            }
+        }
+    }, [reportData, reportBreakdown])
 
     // --- Product Management ---
     const toggleAvailability = async (productId) => {
@@ -515,28 +573,10 @@ export default function AdminPage() {
 
     if (!loggedIn) {
         return (
-            <div className="login-screen">
-                <div className="login-box">
-                    <div style={{ textAlign: 'center', marginBottom: '24px' }}>
-                        <h1 className="page-title" style={{ marginBottom: '8px' }}>Restaurant Admin</h1>
-                        <p style={{ color: '#64748b', fontSize: '15px' }}>Autentificare securizată</p>
-                    </div>
-                    <input
-                        className="login-input"
-                        placeholder="Username Administrator"
-                        value={credentials.username}
-                        onChange={e => setCredentials(p => ({ ...p, username: e.target.value }))}
-                        onKeyDown={e => e.key === 'Enter' && login()}
-                    />
-                    <input
-                        className="login-input"
-                        type="password"
-                        placeholder="Parolă"
-                        value={credentials.password}
-                        onChange={e => setCredentials(p => ({ ...p, password: e.target.value }))}
-                        onKeyDown={e => e.key === 'Enter' && login()}
-                    />
-                    <button className="login-btn" style={{ background: '#0f172a' }} onClick={login}>Intră în Dashboard</button>
+            <div className="login-screen" style={{ background: '#0f172a', display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: '#ffffff' }}>
+                <div style={{ textAlign: 'center' }}>
+                    <div className="premium-login-spinner" style={{ margin: '0 auto 16px auto' }}></div>
+                    <p style={{ color: '#94a3b8' }}>Se redirecționează...</p>
                 </div>
             </div>
         )
@@ -1480,85 +1520,340 @@ export default function AdminPage() {
                             </div>
                         </div>
                     </>
-                ) : activeTab === 'reports' ? (
-                    <>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
-                            <h1 style={{ fontSize: '32px', fontWeight: '800', color: '#0f172a', margin: 0 }}>📊 Rapoarte Vânzări</h1>
-                            <div style={{ display: 'flex', gap: '12px' }}>
-                                <button 
-                                    onClick={() => setReportChartType('line')} 
-                                    style={{ padding: '8px 16px', background: reportChartType === 'line' ? '#4f46e5' : '#ffffff', color: reportChartType === 'line' ? '#ffffff' : '#64748b', border: '1px solid #e2e8f0', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}
-                                >
-                                    📈 Linie
-                                </button>
-                                <button 
-                                    onClick={() => setReportChartType('bar')} 
-                                    style={{ padding: '8px 16px', background: reportChartType === 'bar' ? '#4f46e5' : '#ffffff', color: reportChartType === 'bar' ? '#ffffff' : '#64748b', border: '1px solid #e2e8f0', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}
-                                >
-                                    📊 Bare
-                                </button>
-                            </div>
-                        </div>
+                ) : activeTab === 'reports' ? (() => {
+                    const allAvailableCategories = reportData.datasets && reportBreakdown === 'category' ? reportData.datasets.map(d => d.label) : []
+                    const allAvailableProducts = reportData.datasets && reportBreakdown === 'product' ? reportData.datasets.map(d => d.label) : []
+                    const filteredDatasets = reportData.datasets ? reportData.datasets.filter(d => {
+                        if (reportBreakdown === 'category') return selectedCategories.includes(d.label)
+                        if (reportBreakdown === 'product') return selectedProducts.includes(d.label)
+                        return true
+                    }) : []
+                    const filteredReportData = { ...reportData, datasets: filteredDatasets }
+                    const filteredTotalSales = filteredDatasets.reduce((acc, d) => acc + (d.data ? d.data.reduce((a, b) => a + b, 0) : 0), 0)
 
-                        {/* Controls Panel */}
-                        <div style={{ background: '#ffffff', padding: '20px 24px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'grid', gridTemplateColumns: '1fr 1fr 1.5fr 1fr', gap: '20px', marginBottom: '32px', alignItems: 'end' }}>
-                            <div>
-                                <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#475569', marginBottom: '8px' }}>Grupare Timp</label>
-                                <select value={reportPeriod} onChange={e => setReportPeriod(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', background: '#f8fafc', fontSize: '14px', fontWeight: '600' }}>
-                                    <option value="day">Zilnic</option>
-                                    <option value="week">Săptămânal</option>
-                                    <option value="month">Lunar</option>
-                                </select>
-                            </div>
-
-                            <div>
-                                <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#475569', marginBottom: '8px' }}>Vizualizare Per</label>
-                                <select value={reportBreakdown} onChange={e => setReportBreakdown(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', background: '#f8fafc', fontSize: '14px', fontWeight: '600' }}>
-                                    <option value="total">Total Restaurant</option>
-                                    <option value="category">Categorie Produs</option>
-                                    <option value="product">Produs Individual</option>
-                                </select>
+                    return (
+                        <>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px' }}>
+                                <h1 style={{ fontSize: '32px', fontWeight: '800', color: '#0f172a', margin: 0 }}>📊 Rapoarte Vânzări</h1>
+                                <div style={{ display: 'flex', gap: '12px' }}>
+                                    <button 
+                                        onClick={() => setReportChartType('line')} 
+                                        style={{ padding: '8px 16px', background: reportChartType === 'line' ? '#4f46e5' : '#ffffff', color: reportChartType === 'line' ? '#ffffff' : '#64748b', border: '1px solid #e2e8f0', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}
+                                    >
+                                        📈 Linie
+                                    </button>
+                                    <button 
+                                        onClick={() => setReportChartType('bar')} 
+                                        style={{ padding: '8px 16px', background: reportChartType === 'bar' ? '#4f46e5' : '#ffffff', color: reportChartType === 'bar' ? '#ffffff' : '#64748b', border: '1px solid #e2e8f0', borderRadius: '8px', fontWeight: '600', cursor: 'pointer' }}
+                                    >
+                                        📊 Bare
+                                    </button>
+                                </div>
                             </div>
 
-                            <div>
-                                <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#475569', marginBottom: '8px' }}>Interval Predefinit</label>
-                                <select value={reportPreset} onChange={e => setReportPreset(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', background: '#f8fafc', fontSize: '14px', fontWeight: '600' }}>
-                                    <option value="today">Azi</option>
-                                    <option value="7d">Ultimele 7 zile</option>
-                                    <option value="30d">Ultimele 30 zile</option>
-                                    <option value="90d">Ultimele 90 zile</option>
-                                    <option value="custom">Personalizat (Custom)</option>
-                                </select>
-                            </div>
+                            {/* Controls Panel */}
+                            <div style={{ background: '#ffffff', padding: '20px 24px', borderRadius: '16px', border: '1px solid #e2e8f0', display: 'grid', gridTemplateColumns: '1fr 1fr 1.5fr 1fr', gap: '20px', marginBottom: '32px', alignItems: 'end' }}>
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#475569', marginBottom: '8px' }}>Grupare Timp</label>
+                                    <select value={reportPeriod} onChange={e => setReportPeriod(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', background: '#f8fafc', fontSize: '14px', fontWeight: '600' }}>
+                                        <option value="day">Zilnic</option>
+                                        <option value="week">Săptămânal</option>
+                                        <option value="month">Lunar</option>
+                                    </select>
+                                </div>
 
-                            {reportPreset === 'custom' && (
-                                <div style={{ display: 'flex', gap: '8px' }}>
-                                    <div style={{ flex: 1 }}>
-                                        <label style={{ display: 'block', fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>De la</label>
-                                        <input type="date" value={reportCustomDates.start} onChange={e => setReportCustomDates({...reportCustomDates, start: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '12px' }} />
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#475569', marginBottom: '8px' }}>Vizualizare Per</label>
+                                    <select value={reportBreakdown} onChange={e => setReportBreakdown(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', background: '#f8fafc', fontSize: '14px', fontWeight: '600' }}>
+                                        <option value="total">Total Restaurant</option>
+                                        <option value="category">Categorie Produs</option>
+                                        <option value="product">Produs Individual</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '700', color: '#475569', marginBottom: '8px' }}>Interval Predefinit</label>
+                                    <select value={reportPreset} onChange={e => setReportPreset(e.target.value)} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1', outline: 'none', background: '#f8fafc', fontSize: '14px', fontWeight: '600' }}>
+                                        <option value="today">Azi</option>
+                                        <option value="7d">Ultimele 7 zile</option>
+                                        <option value="30d">Ultimele 30 zile</option>
+                                        <option value="90d">Ultimele 90 zile</option>
+                                        <option value="custom">Personalizat (Custom)</option>
+                                    </select>
+                                </div>
+
+                                {reportPreset === 'custom' && (
+                                    <div style={{ display: 'flex', gap: '8px' }}>
+                                        <div style={{ flex: 1 }}>
+                                            <label style={{ display: 'block', fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>De la</label>
+                                            <input type="date" value={reportCustomDates.start} onChange={e => setReportCustomDates({...reportCustomDates, start: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '12px' }} />
+                                        </div>
+                                        <div style={{ flex: 1 }}>
+                                            <label style={{ display: 'block', fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>Până la</label>
+                                            <input type="date" value={reportCustomDates.end} onChange={e => setReportCustomDates({...reportCustomDates, end: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '12px' }} />
+                                        </div>
                                     </div>
-                                    <div style={{ flex: 1 }}>
-                                        <label style={{ display: 'block', fontSize: '11px', color: '#64748b', marginBottom: '4px' }}>Până la</label>
-                                        <input type="date" value={reportCustomDates.end} onChange={e => setReportCustomDates({...reportCustomDates, end: e.target.value})} style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1', fontSize: '12px' }} />
+                                )}
+                            </div>
+
+                            {/* Category Filter UI */}
+                            {reportBreakdown === 'category' && allAvailableCategories.length > 0 && (
+                                <div style={{ background: '#ffffff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '32px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' }}>
+                                    <div style={{ fontSize: '14px', fontWeight: '700', color: '#475569', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                        <span>🏷️ Selectează Categorii pentru Comparare (Poți alege până la 5):</span>
+                                        <span style={{ fontSize: '12px', color: '#94a3b8', fontWeight: '500' }}>({selectedCategories.length} selectate)</span>
+                                    </div>
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+                                        {allAvailableCategories.map(cat => {
+                                            const isSelected = selectedCategories.includes(cat)
+                                            const colorIdx = selectedCategories.indexOf(cat)
+                                            const activeColor = isSelected ? CHART_COLORS[colorIdx % CHART_COLORS.length].stroke : '#e2e8f0'
+                                            
+                                            return (
+                                                <button
+                                                    key={cat}
+                                                    onClick={() => toggleCategory(cat)}
+                                                    style={{
+                                                        padding: '8px 16px',
+                                                        background: isSelected ? activeColor : '#f8fafc',
+                                                        color: isSelected ? '#ffffff' : '#475569',
+                                                        border: `1px solid ${isSelected ? activeColor : '#cbd5e1'}`,
+                                                        borderRadius: '30px',
+                                                        fontWeight: '700',
+                                                        fontSize: '13px',
+                                                        cursor: 'pointer',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '8px',
+                                                        transition: 'all 0.2s ease',
+                                                        boxShadow: isSelected ? `0 4px 12px ${CHART_COLORS[colorIdx % CHART_COLORS.length].fill}` : 'none'
+                                                    }}
+                                                >
+                                                    {isSelected && <span style={{ width: '8px', height: '8px', background: '#ffffff', borderRadius: '50%' }} />}
+                                                    <span>{cat}</span>
+                                                </button>
+                                            )
+                                        })}
                                     </div>
                                 </div>
                             )}
-                        </div>
 
-                        {/* Chart Render */}
-                        <div style={{ background: '#ffffff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#1e293b' }}>
-                                    Grafic Evoluție Vânzări ({reportPeriod === 'day' ? 'Zilnic' : reportPeriod === 'week' ? 'Săptămânal' : 'Lunar'})
-                                </h3>
-                                <div style={{ fontSize: '14px', color: '#64748b', fontWeight: '600' }}>
-                                    Total Vânzări Interval: <strong style={{ color: '#10b981' }}>{reportData.datasets?.reduce((acc, d) => acc + d.data.reduce((a, b) => a + b, 0), 0).toFixed(2)} lei</strong>
+                            {/* Product Filter UI */}
+                            {reportBreakdown === 'product' && allAvailableProducts.length > 0 && (
+                                <div style={{ background: '#ffffff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0', marginBottom: '32px', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.02)' }}>
+                                    <div style={{ fontSize: '14px', fontWeight: '700', color: '#475569', marginBottom: '16px' }}>
+                                        🍕 Compară Produse Individuale (Adaugă produse din listă):
+                                    </div>
+                                    
+                                    {/* Selected Badges */}
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginBottom: '20px' }}>
+                                        {selectedProducts.map((prod, idx) => {
+                                            const color = CHART_COLORS[idx % CHART_COLORS.length]
+                                            return (
+                                                <div
+                                                    key={prod}
+                                                    style={{
+                                                        padding: '6px 14px',
+                                                        background: '#f8fafc',
+                                                        border: `1px solid ${color.stroke}`,
+                                                        borderRadius: '30px',
+                                                        color: '#1e293b',
+                                                        fontSize: '13px',
+                                                        fontWeight: '700',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '8px',
+                                                        boxShadow: `0 2px 6px ${color.fill || 'rgba(0,0,0,0.02)'}`
+                                                    }}
+                                                >
+                                                    <span style={{ width: '8px', height: '8px', background: color.stroke, borderRadius: '50%' }} />
+                                                    <span>{prod}</span>
+                                                    <button
+                                                        onClick={() => removeProduct(prod)}
+                                                        style={{
+                                                            background: 'transparent',
+                                                            border: 'none',
+                                                            color: '#94a3b8',
+                                                            cursor: 'pointer',
+                                                            fontSize: '14px',
+                                                            fontWeight: '700',
+                                                            padding: 0,
+                                                            marginLeft: '4px',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            width: '16px',
+                                                            height: '16px',
+                                                            borderRadius: '50%'
+                                                        }}
+                                                        onMouseEnter={e => e.target.style.color = '#ef4444'}
+                                                        onMouseLeave={e => e.target.style.color = '#94a3b8'}
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                </div>
+                                            )
+                                        })}
+                                        {selectedProducts.length === 0 && (
+                                            <div style={{ fontSize: '13px', color: '#94a3b8', fontStyle: 'italic', padding: '6px 0' }}>
+                                                Niciun produs selectat. Caută și adaugă produse mai jos.
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Product Search Box with Dropdown */}
+                                    <div style={{ position: 'relative', maxWidth: '450px' }}>
+                                        <div style={{ position: 'relative' }}>
+                                            <input
+                                                type="text"
+                                                placeholder="Caută și adaugă produs..."
+                                                value={productSearchQuery}
+                                                onChange={e => {
+                                                    setProductSearchQuery(e.target.value)
+                                                    setShowProductDropdown(true)
+                                                }}
+                                                onFocus={() => setShowProductDropdown(true)}
+                                                onBlur={() => {
+                                                    setTimeout(() => setShowProductDropdown(false), 200)
+                                                }}
+                                                style={{
+                                                    width: '100%',
+                                                    padding: '12px 14px 12px 40px',
+                                                    borderRadius: '10px',
+                                                    border: '1px solid #cbd5e1',
+                                                    fontSize: '14px',
+                                                    fontWeight: '500',
+                                                    outline: 'none',
+                                                    boxSizing: 'border-box',
+                                                    transition: 'all 0.2s',
+                                                    boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.02)'
+                                                }}
+                                            />
+                                            <svg
+                                                width="18"
+                                                height="18"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                                stroke="#64748b"
+                                                strokeWidth="2.5"
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                                style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}
+                                            >
+                                                <circle cx="11" cy="11" r="8"></circle>
+                                                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                                            </svg>
+                                        </div>
+                                        
+                                        {showProductDropdown && (
+                                            <div style={{
+                                                position: 'absolute',
+                                                top: '100%',
+                                                left: 0,
+                                                right: 0,
+                                                background: '#ffffff',
+                                                border: '1px solid #e2e8f0',
+                                                borderRadius: '12px',
+                                                maxHeight: '220px',
+                                                overflowY: 'auto',
+                                                zIndex: 1100,
+                                                boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1)',
+                                                marginTop: '8px'
+                                            }}>
+                                                {allAvailableProducts
+                                                    .filter(p => !selectedProducts.includes(p) && p.toLowerCase().includes(productSearchQuery.toLowerCase()))
+                                                    .map(p => (
+                                                        <div
+                                                            key={p}
+                                                            onMouseDown={() => {
+                                                                addProduct(p)
+                                                                setProductSearchQuery('')
+                                                                setShowProductDropdown(false)
+                                                            }}
+                                                            style={{
+                                                                padding: '12px 16px',
+                                                                cursor: 'pointer',
+                                                                borderBottom: '1px solid #f1f5f9',
+                                                                fontSize: '13px',
+                                                                fontWeight: '600',
+                                                                color: '#334155',
+                                                                transition: 'all 0.2s'
+                                                            }}
+                                                            onMouseEnter={e => {
+                                                                e.target.style.background = '#f1f5f9'
+                                                                e.target.style.color = '#4f46e5'
+                                                            }}
+                                                            onMouseLeave={e => {
+                                                                e.target.style.background = 'transparent'
+                                                                e.target.style.color = '#334155'
+                                                            }}
+                                                        >
+                                                            {p}
+                                                        </div>
+                                                    ))
+                                                }
+                                                {allAvailableProducts.filter(p => !selectedProducts.includes(p) && p.toLowerCase().includes(productSearchQuery.toLowerCase())).length === 0 && (
+                                                    <div style={{ padding: '16px', textAlign: 'center', color: '#94a3b8', fontSize: '13px', fontWeight: '500' }}>
+                                                        Niciun alt produs găsit în datele de vânzări.
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
+                            )}
+
+                            {/* Chart Render */}
+                            <div style={{ background: '#ffffff', padding: '24px', borderRadius: '16px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.05)' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                                    <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '700', color: '#1e293b' }}>
+                                        Grafic Evoluție Vânzări ({reportPeriod === 'day' ? 'Zilnic' : reportPeriod === 'week' ? 'Săptămânal' : 'Lunar'})
+                                    </h3>
+                                    <div style={{ fontSize: '14px', color: '#64748b', fontWeight: '600' }}>
+                                        Total Vânzări Selectate: <strong style={{ color: '#10b981' }}>{filteredTotalSales.toFixed(2)} lei</strong>
+                                    </div>
+                                </div>
+                                
+                                <InteractiveSVGChart data={filteredReportData} type={reportChartType} />
+
+                                {/* HTML Premium Legend */}
+                                {filteredDatasets.length > 0 && (
+                                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', marginTop: '24px', padding: '16px', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0', justifyContent: 'center' }}>
+                                        {filteredDatasets.map((dataset, idx) => {
+                                            const color = CHART_COLORS[idx % CHART_COLORS.length];
+                                            const datasetTotal = dataset.data.reduce((a, b) => a + b, 0);
+                                            return (
+                                                <div 
+                                                    key={idx} 
+                                                    style={{ 
+                                                        display: 'flex', 
+                                                        alignItems: 'center', 
+                                                        gap: '8px', 
+                                                        fontSize: '13px', 
+                                                        color: '#334155', 
+                                                        fontWeight: '700', 
+                                                        padding: '6px 12px', 
+                                                        background: '#ffffff', 
+                                                        borderRadius: '20px', 
+                                                        boxShadow: '0 1px 3px rgba(0,0,0,0.05)', 
+                                                        border: '1px solid #f1f5f9' 
+                                                    }}
+                                                >
+                                                    <span style={{ width: '10px', height: '10px', background: color.stroke, borderRadius: '50%', display: 'inline-block' }} />
+                                                    <span>{dataset.label}</span>
+                                                    <span style={{ color: '#64748b', fontWeight: '600', fontSize: '11px', borderLeft: '1px solid #e2e8f0', paddingLeft: '8px', marginLeft: '4px' }}>
+                                                        {datasetTotal.toFixed(2)} lei
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
                             </div>
-                            <InteractiveSVGChart data={reportData} type={reportChartType} />
-                        </div>
-                    </>
-                ) : activeTab === 'logs' ? (
+                        </>
+                    )
+                })()
+                 : activeTab === 'logs' ? (
                     <>
                         <h1 style={{ fontSize: '32px', fontWeight: '800', color: '#0f172a', marginBottom: '32px' }}>📜 Istoric Operațiuni</h1>
 
@@ -1671,10 +1966,10 @@ export default function AdminPage() {
 
 function InteractiveSVGChart({ data, type }) {
     const [hoverInfo, setHoverInfo] = useState(null)
-    if (!data || !data.labels || data.labels.length === 0) {
+    if (!data || !data.datasets || data.datasets.length === 0 || !data.labels || data.labels.length === 0) {
         return (
-            <div style={{ height: '300px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #cbd5e1', color: '#64748b' }}>
-                Nicio dată de vânzări înregistrată pentru acest interval.
+            <div style={{ height: '320px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', borderRadius: '12px', border: '1px dashed #cbd5e1', color: '#64748b', fontWeight: '600', fontSize: '14px' }}>
+                💡 Selectează cel puțin o categorie/produs din lista de mai sus pentru a vizualiza evoluția vânzărilor.
             </div>
         )
     }
@@ -1685,7 +1980,7 @@ function InteractiveSVGChart({ data, type }) {
     // Dimensions
     const width = 750
     const height = 350
-    const padding = { top: 30, right: 150, bottom: 40, left: 60 }
+    const padding = { top: 30, right: 30, bottom: 40, left: 60 }
 
     const chartWidth = width - padding.left - padding.right
     const chartHeight = height - padding.top - padding.bottom
@@ -1693,9 +1988,11 @@ function InteractiveSVGChart({ data, type }) {
     // Find max value across all datasets
     let maxVal = 0
     datasets.forEach(d => {
-        d.data.forEach(val => {
-            if (val > maxVal) maxVal = val
-        })
+        if (d.data) {
+            d.data.forEach(val => {
+                if (val > maxVal) maxVal = val
+            })
+        }
     })
     if (maxVal === 0) maxVal = 100 // default range if no sales
     
@@ -1719,21 +2016,16 @@ function InteractiveSVGChart({ data, type }) {
     }
     maxVal = roundToNiceNumber(maxVal * 1.1)
 
-    // Palette of vibrant colors
-    const colors = [
-        { stroke: '#4f46e5', fill: 'rgba(79, 70, 229, 0.08)' }, // Indigo
-        { stroke: '#06b6d4', fill: 'rgba(6, 182, 212, 0.08)' }, // Cyan
-        { stroke: '#10b981', fill: 'rgba(16, 185, 129, 0.08)' }, // Emerald
-        { stroke: '#f59e0b', fill: 'rgba(245, 158, 11, 0.08)' }, // Amber
-        { stroke: '#ec4899', fill: 'rgba(236, 72, 153, 0.08)' }, // Pink
-        { stroke: '#8b5cf6', fill: 'rgba(139, 92, 246, 0.08)' }, // Violet
-    ]
-
     // X coordinates
     const numPoints = labels.length
     const getX = (index) => {
-        if (numPoints <= 1) return padding.left + chartWidth / 2
-        return padding.left + (index / (numPoints - 1)) * chartWidth
+        if (type === 'bar') {
+            const bandWidth = chartWidth / numPoints
+            return padding.left + (index + 0.5) * bandWidth
+        } else {
+            if (numPoints <= 1) return padding.left + chartWidth / 2
+            return padding.left + (index / (numPoints - 1)) * chartWidth
+        }
     }
 
     // Y coordinates
@@ -1749,8 +2041,20 @@ function InteractiveSVGChart({ data, type }) {
     })
 
     return (
-        <div style={{ position: 'relative', background: '#ffffff', padding: '20px', borderRadius: '16px', border: '1px solid #e2e8f0' }}>
+        <div style={{ position: 'relative', background: '#ffffff', padding: '10px 0', borderRadius: '16px' }}>
             <svg viewBox={`0 0 ${width} ${height}`} width="100%" height="100%" style={{ overflow: 'visible' }}>
+                <defs>
+                    {datasets.map((_, dIdx) => {
+                        const color = CHART_COLORS[dIdx % CHART_COLORS.length]
+                        return (
+                            <linearGradient key={dIdx} id={`area-grad-${dIdx}`} x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor={color.stroke} stopOpacity={0.28} />
+                                <stop offset="100%" stopColor={color.stroke} stopOpacity={0.0} />
+                            </linearGradient>
+                        )
+                    })}
+                </defs>
+
                 {/* Y-Axis Grid Lines */}
                 {yGridLines.map((tick, idx) => (
                     <g key={idx}>
@@ -1761,13 +2065,14 @@ function InteractiveSVGChart({ data, type }) {
                             y2={tick.y} 
                             stroke="#f1f5f9" 
                             strokeWidth="1.5"
+                            strokeDasharray={idx === 0 ? "none" : "4 4"}
                         />
                         <text 
-                            x={padding.left - 10} 
+                            x={padding.left - 12} 
                             y={tick.y + 4} 
                             textAnchor="end" 
                             fill="#94a3b8" 
-                            style={{ fontSize: '11px', fontWeight: '500', fontFamily: 'sans-serif' }}
+                            style={{ fontSize: '11px', fontWeight: '600', fontFamily: 'sans-serif' }}
                         >
                             {Math.round(tick.val)} lei
                         </text>
@@ -1782,20 +2087,34 @@ function InteractiveSVGChart({ data, type }) {
                         <text 
                             key={idx}
                             x={getX(idx)} 
-                            y={height - padding.bottom + 20} 
+                            y={height - padding.bottom + 22} 
                             textAnchor="middle" 
                             fill="#94a3b8" 
-                            style={{ fontSize: '11px', fontWeight: '500', fontFamily: 'sans-serif' }}
+                            style={{ fontSize: '11px', fontWeight: '600', fontFamily: 'sans-serif' }}
                         >
                             {lbl}
                         </text>
                     )
                 })}
 
+                {/* Vertical Guide Line */}
+                {hoverInfo && (
+                    <line 
+                        x1={hoverInfo.x} 
+                        y1={padding.top} 
+                        x2={hoverInfo.x} 
+                        y2={padding.top + chartHeight} 
+                        stroke="#cbd5e1" 
+                        strokeWidth="1.5" 
+                        strokeDasharray="4 4" 
+                        style={{ pointerEvents: 'none' }}
+                    />
+                )}
+
                 {/* Render Datasets */}
                 {type === 'line' ? (
                     datasets.map((dataset, dIdx) => {
-                        const color = colors[dIdx % colors.length]
+                        const color = CHART_COLORS[dIdx % CHART_COLORS.length]
                         
                         let pathD = ""
                         dataset.data.forEach((val, pIdx) => {
@@ -1820,14 +2139,14 @@ function InteractiveSVGChart({ data, type }) {
                             <g key={dIdx}>
                                 <path 
                                     d={areaD} 
-                                    fill={color.fill}
+                                    fill={`url(#area-grad-${dIdx})`}
                                     style={{ transition: 'all 0.3s' }}
                                 />
                                 <path 
                                     d={pathD} 
                                     fill="none" 
                                     stroke={color.stroke} 
-                                    strokeWidth="3" 
+                                    strokeWidth="3.5" 
                                     strokeLinecap="round"
                                     strokeLinejoin="round"
                                     style={{ transition: 'all 0.3s' }}
@@ -1835,23 +2154,28 @@ function InteractiveSVGChart({ data, type }) {
                                 {dataset.data.map((val, pIdx) => {
                                     const x = getX(pIdx)
                                     const y = getY(val)
+                                    const isHovered = hoverInfo && hoverInfo.pIdx === pIdx && hoverInfo.dIdx === dIdx
+
                                     return (
                                         <circle 
                                             key={pIdx}
                                             cx={x} 
                                             cy={y} 
-                                            r="5" 
+                                            r={isHovered ? "6" : "4.5"} 
                                             fill="#ffffff" 
                                             stroke={color.stroke} 
                                             strokeWidth="3"
-                                            style={{ cursor: 'pointer', transition: 'all 0.2s' }}
+                                            style={{ cursor: 'pointer', transition: 'all 0.15s ease-in-out' }}
                                             onMouseEnter={() => {
                                                 setHoverInfo({
                                                     x: x,
                                                     y: y,
                                                     label: labels[pIdx],
                                                     val: val,
-                                                    datasetLabel: dataset.label
+                                                    datasetLabel: dataset.label,
+                                                    color: color.stroke,
+                                                    pIdx: pIdx,
+                                                    dIdx: dIdx
                                                 })
                                             }}
                                             onMouseLeave={() => {
@@ -1866,10 +2190,10 @@ function InteractiveSVGChart({ data, type }) {
                 ) : (
                     // Bar Chart
                     datasets.map((dataset, dIdx) => {
-                        const color = colors[dIdx % colors.length]
+                        const color = CHART_COLORS[dIdx % CHART_COLORS.length]
                         const numDatasets = datasets.length
                         const calculatedBarWidth = (chartWidth / numPoints) / (numDatasets + 1)
-                        const barWidth = Math.min(40, Math.max(4, calculatedBarWidth))
+                        const barWidth = Math.min(36, Math.max(6, calculatedBarWidth))
 
                         return (
                             <g key={dIdx}>
@@ -1879,6 +2203,7 @@ function InteractiveSVGChart({ data, type }) {
                                     const x = groupX + offset - barWidth / 2
                                     const y = getY(val)
                                     const barHeight = (val / maxVal) * chartHeight
+                                    const isHovered = hoverInfo && hoverInfo.pIdx === pIdx && hoverInfo.dIdx === dIdx
 
                                     return (
                                         <rect 
@@ -1888,15 +2213,23 @@ function InteractiveSVGChart({ data, type }) {
                                             width={barWidth - 2}
                                             height={Math.max(0, barHeight)}
                                             fill={color.stroke}
-                                            rx="3"
-                                            style={{ cursor: 'pointer', transition: 'all 0.2s', opacity: 0.95 }}
+                                            rx="4"
+                                            style={{ 
+                                                cursor: 'pointer', 
+                                                transition: 'all 0.15s ease', 
+                                                opacity: isHovered ? 1.0 : 0.88,
+                                                filter: isHovered ? 'drop-shadow(0px 2px 4px rgba(0,0,0,0.15))' : 'none'
+                                            }}
                                             onMouseEnter={() => {
                                                 setHoverInfo({
-                                                    x: x + barWidth / 2,
+                                                    x: x + (barWidth - 2) / 2,
                                                     y: y,
                                                     label: labels[pIdx],
                                                     val: val,
-                                                    datasetLabel: dataset.label
+                                                    datasetLabel: dataset.label,
+                                                    color: color.stroke,
+                                                    pIdx: pIdx,
+                                                    dIdx: dIdx
                                                 })
                                             }}
                                             onMouseLeave={() => {
@@ -1909,27 +2242,6 @@ function InteractiveSVGChart({ data, type }) {
                         )
                     })
                 )}
-
-                {/* Legend */}
-                <g transform={`translate(${width - padding.right + 20}, ${padding.top})`}>
-                    {datasets.map((dataset, dIdx) => {
-                        const color = colors[dIdx % colors.length]
-                        const y = dIdx * 24
-                        return (
-                            <g key={dIdx} transform={`translate(0, ${y})`}>
-                                <rect width="14" height="14" rx="4" fill={color.stroke} />
-                                <text 
-                                    x="22" 
-                                    y="11" 
-                                    fill="#475569" 
-                                    style={{ fontSize: '12px', fontWeight: '600', fontFamily: 'sans-serif' }}
-                                >
-                                    {dataset.label.length > 15 ? dataset.label.substring(0, 15) + '...' : dataset.label}
-                                </text>
-                            </g>
-                        )
-                    })}
-                </g>
             </svg>
 
             {hoverInfo && (
@@ -1939,21 +2251,23 @@ function InteractiveSVGChart({ data, type }) {
                         left: `${(hoverInfo.x / width) * 100}%`,
                         top: `${(hoverInfo.y / height) * 100 - 15}%`,
                         transform: 'translate(-50%, -100%)',
-                        background: '#0f172a',
+                        background: 'rgba(15, 23, 42, 0.95)',
+                        backdropFilter: 'blur(8px)',
                         color: '#f8fafc',
                         padding: '10px 14px',
                         borderRadius: '8px',
-                        boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.3)',
+                        boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.3), 0 8px 10px -6px rgba(0, 0, 0, 0.3)',
                         pointerEvents: 'none',
-                        zIndex: 10,
+                        zIndex: 100,
                         fontSize: '12px',
                         fontFamily: 'sans-serif',
                         whiteSpace: 'nowrap',
-                        border: '1px solid #1e293b'
+                        border: '1px solid #334155'
                     }}
                 >
-                    <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '600', marginBottom: '4px' }}>{hoverInfo.label}</div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <div style={{ color: '#94a3b8', fontSize: '11px', fontWeight: '700', marginBottom: '4px' }}>{hoverInfo.label}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ width: '8px', height: '8px', background: hoverInfo.color, borderRadius: '50%', display: 'inline-block' }} />
                         <span style={{ fontWeight: '700' }}>{hoverInfo.datasetLabel}:</span>
                         <span style={{ color: '#38bdf8', fontWeight: '800' }}>{hoverInfo.val.toFixed(2)} lei</span>
                     </div>

@@ -4,6 +4,7 @@ import KitchenPage from './pages/KitchenPage'
 import WaiterPage from './pages/WaiterPage'
 import BarPage from './pages/BarPage'
 import AdminPage from './pages/AdminPage'
+import LoginPage from './pages/LoginPage'
 
 function App() {
   return (
@@ -14,7 +15,9 @@ function App() {
         <Route path="/waiter" element={<WaiterPage />} />
         <Route path="/bar" element={<BarPage />} />
         <Route path="/admin" element={<AdminPage />} />
-        <Route path="/login" element={<Navigate to="/waiter" />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
   )

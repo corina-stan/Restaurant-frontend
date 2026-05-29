@@ -6,7 +6,6 @@ import '../DesktopLayout.css'
 export default function KitchenPage() {
     const [orders, setOrders] = useState({})
     const [loggedIn, setLoggedIn] = useState(false)
-    const [credentials, setCredentials] = useState({ username: '', password: '' })
     const [token, setToken] = useState(null)
     const seenIds = useRef(new Set())
 
@@ -51,38 +50,18 @@ export default function KitchenPage() {
 
     useEffect(() => {
         const savedToken = sessionStorage.getItem('kitchen_token')
-        if (savedToken) {
+        if (!savedToken) {
+            window.location.href = '/login'
+        } else {
             setToken(savedToken)
             setLoggedIn(true)
             loadKitchenOrders(savedToken)
         }
     }, [])
 
-    const login = async () => {
-        try {
-            const res = await api.post('/token/', credentials)
-            const payload = JSON.parse(atob(res.data.access.split('.')[1]))
-
-            if (payload.role !== 'kitchen' && !payload.is_superuser) {
-                alert('Nu ai permisiunea de a accesa bucătăria!')
-                return
-            }
-
-            sessionStorage.setItem('kitchen_token', res.data.access)
-            setToken(res.data.access)
-            setLoggedIn(true)
-            await loadKitchenOrders(res.data.access)
-        } catch (err) {
-            alert('Username sau parolă greșite!')
-        }
-    }
-
     const logout = () => {
         sessionStorage.removeItem('kitchen_token')
-        setToken(null)
-        setLoggedIn(false)
-        setOrders({})
-        seenIds.current = new Set()
+        window.location.href = '/login'
     }
 
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -161,23 +140,10 @@ export default function KitchenPage() {
 
     if (!loggedIn) {
         return (
-            <div className="login-screen">
-                <div className="login-box">
-                    <h1 className="page-title" style={{ marginBottom: '24px' }}>Bucătărie</h1>
-                    <input
-                        className="login-input"
-                        placeholder="Username"
-                        value={credentials.username}
-                        onChange={e => setCredentials(p => ({ ...p, username: e.target.value }))}
-                    />
-                    <input
-                        className="login-input"
-                        type="password"
-                        placeholder="Parolă"
-                        value={credentials.password}
-                        onChange={e => setCredentials(p => ({ ...p, password: e.target.value }))}
-                    />
-                    <button className="login-btn" onClick={login}>Intră</button>
+            <div className="login-screen" style={{ background: '#0f172a', display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: '#ffffff' }}>
+                <div style={{ textAlign: 'center' }}>
+                    <div className="premium-login-spinner" style={{ margin: '0 auto 16px auto' }}></div>
+                    <p style={{ color: '#94a3b8' }}>Se redirecționează...</p>
                 </div>
             </div>
         )

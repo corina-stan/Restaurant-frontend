@@ -10,7 +10,6 @@ export default function WaiterPage() {
     const [notifications, setNotifications] = useState([])
     const [token, setToken] = useState(null)
     const [loggedIn, setLoggedIn] = useState(false)
-    const [credentials, setCredentials] = useState({ username: '', password: '' })
     const [selectedTable, setSelectedTable] = useState(null)
     const [payingOrder, setPayingOrder] = useState(null)
     const [payingGroup, setPayingGroup] = useState(null)
@@ -28,45 +27,20 @@ export default function WaiterPage() {
 
     useEffect(() => {
         const savedToken = sessionStorage.getItem('access_token')
-        if (savedToken) {
+        if (!savedToken) {
+            window.location.href = '/login'
+        } else {
             setToken(savedToken)
             setLoggedIn(true)
             loadData(savedToken)
         }
     }, [])
 
-    const login = async () => {
-        try {
-            const res = await api.post('/token/', credentials)
-            const payload = JSON.parse(atob(res.data.access.split('.')[1]))
-
-            if (payload.role !== 'waiter' && !payload.is_superuser) {
-                alert('Nu ai permisiunea de a accesa interfața ospătar!')
-                return
-            }
-
-            sessionStorage.setItem('access_token', res.data.access)
-            sessionStorage.setItem('refresh_token', res.data.refresh)
-            sessionStorage.setItem('waiter_username', credentials.username)
-            setToken(res.data.access)
-            setLoggedIn(true)
-            setUsername(credentials.username)
-            await loadData(res.data.access)
-        } catch (err) {
-            alert('Username sau parolă greșite!')
-        }
-    }
-
     const logout = () => {
         sessionStorage.removeItem('access_token')
         sessionStorage.removeItem('refresh_token')
         sessionStorage.removeItem('waiter_username')
-        setToken(null)
-        setLoggedIn(false)
-        setOrders([])
-        setTables([])
-        setNotifications([])
-        setUsername('')
+        window.location.href = '/login'
     }
 
     const loadData = async (accessToken) => {
@@ -318,6 +292,49 @@ export default function WaiterPage() {
         }
     }
 
+    const handleShiftClosure = async () => {
+        const ok = window.confirm(
+            "Ești sigur că dorești să închizi tura și să generezi Raportul Z?\n" +
+            "Această acțiune va închide și va deconta toate tranzacțiile tale curente."
+        )
+        if (!ok) return
+
+        try {
+            const res = await api.post('/payments/z-report/create/', {}, {
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            setDocType('receipt_z')
+            setSelectedPrintData(res.data)
+            setPrintModalOpen(true)
+        } catch (err) {
+            console.error('Eroare închidere tură:', err)
+            const errMsg = err.response?.data?.error || 'Eroare la generarea raportului Z!'
+            alert(errMsg)
+        }
+    }
+
+    const handleXReport = async () => {
+        const detailed = window.confirm(
+            "Cum dorești să generezi Raportul X?\n\n" +
+            "Apasă [OK] pentru raport DETALIAT (cu listă de tranzacții)\n" +
+            "Apasă [Cancel] pentru raport PER TOTAL (doar cifre agregate)"
+        )
+
+        try {
+            const res = await api.get('/payments/shift-report/', {
+                params: { detailed: detailed },
+                headers: { Authorization: `Bearer ${token}` }
+            })
+            setDocType('receipt_x')
+            setSelectedPrintData({ ...res.data, isDetailed: detailed })
+            setPrintModalOpen(true)
+        } catch (err) {
+            console.error('Eroare raport X:', err)
+            const errMsg = err.response?.data?.error || 'Eroare la generarea raportului X!'
+            alert(errMsg)
+        }
+    }
+
     const getStatusLabel = (status) => {
         const labels = {
             pending: '⏳ Așteptare',
@@ -344,23 +361,10 @@ export default function WaiterPage() {
 
     if (!loggedIn) {
         return (
-            <div className="login-screen">
-                <div className="login-box">
-                    <h1 className="page-title" style={{ marginBottom: '24px' }}>Ospătar</h1>
-                    <input
-                        className="login-input"
-                        placeholder="Username"
-                        value={credentials.username}
-                        onChange={e => setCredentials(p => ({ ...p, username: e.target.value }))}
-                    />
-                    <input
-                        className="login-input"
-                        type="password"
-                        placeholder="Parolă"
-                        value={credentials.password}
-                        onChange={e => setCredentials(p => ({ ...p, password: e.target.value }))}
-                    />
-                    <button className="login-btn" onClick={login}>Intră</button>
+            <div className="login-screen" style={{ background: '#0f172a', display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: '#ffffff' }}>
+                <div style={{ textAlign: 'center' }}>
+                    <div className="premium-login-spinner" style={{ margin: '0 auto 16px auto' }}></div>
+                    <p style={{ color: '#94a3b8' }}>Se redirecționează...</p>
                 </div>
             </div>
         )
@@ -401,6 +405,50 @@ export default function WaiterPage() {
                         onMouseLeave={e => e.currentTarget.style.filter = 'brightness(1.0)'}
                     >
                         📜 Istoric Plăți / Reprint
+                    </button>
+                    <button 
+                        onClick={handleXReport}
+                        style={{ 
+                            padding: '8px 16px', 
+                            background: 'linear-gradient(135deg, #0ea5e9, #0284c7)', 
+                            color: 'white', 
+                            fontSize: '13px', 
+                            fontWeight: '700',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            border: 'none',
+                            boxShadow: '0 2px 4px rgba(14, 165, 233, 0.25)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            transition: 'all 0.2s'
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.filter = 'brightness(1.1)'}
+                        onMouseLeave={e => e.currentTarget.style.filter = 'brightness(1.0)'}
+                    >
+                        📊 Raport X
+                    </button>
+                    <button 
+                        onClick={handleShiftClosure}
+                        style={{ 
+                            padding: '8px 16px', 
+                            background: 'linear-gradient(135deg, #ef4444, #dc2626)', 
+                            color: 'white', 
+                            fontSize: '13px', 
+                            fontWeight: '700',
+                            borderRadius: '8px',
+                            cursor: 'pointer',
+                            border: 'none',
+                            boxShadow: '0 2px 4px rgba(239, 68, 68, 0.25)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            transition: 'all 0.2s'
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.filter = 'brightness(1.1)'}
+                        onMouseLeave={e => e.currentTarget.style.filter = 'brightness(1.0)'}
+                    >
+                        🔒 Închidere Tură (Raport Z)
                     </button>
                     <button className="logout-btn" onClick={logout}>Logout</button>
                 </div>
@@ -491,26 +539,6 @@ export default function WaiterPage() {
                                         <div style={{ fontSize: 14, color: '#64748b', fontWeight: '500' }}>
                                             Comandă din {new Date(selectedOrder.created_at).toLocaleTimeString()}
                                         </div>
-                                        <button 
-                                            onClick={() => {
-                                                setDocType('receipt_command');
-                                                setSelectedPrintData(selectedOrder);
-                                                setPrintModalOpen(true);
-                                            }}
-                                            style={{ 
-                                                background: '#3b82f6', 
-                                                color: 'white', 
-                                                border: 'none', 
-                                                padding: '6px 12px', 
-                                                borderRadius: '8px', 
-                                                fontSize: '13px', 
-                                                fontWeight: '700', 
-                                                cursor: 'pointer',
-                                                boxShadow: '0 2px 4px rgba(59, 130, 246, 0.25)'
-                                            }}
-                                        >
-                                            📋 Bon Comandă
-                                        </button>
                                     </div>
 
                                     {selectedOrder.groups && selectedOrder.groups.length > 0 ? (

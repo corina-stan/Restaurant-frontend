@@ -1,15 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { useWebSocket } from '../hooks/useWebSocket'
 import api from '../api/axios'
 import '../ClientLayout.css'
-
-const pizzaImg = '/external-images/pizza_img_1777787996916.png'
-const pastaImg = '/external-images/pasta_img_1777788014420.png'
-const dessertImg = '/external-images/dessert_img_1777788035243.png'
-const drinkImg = '/external-images/drink_img_1777788049845.png'
-const soupImg = '/external-images/soup_img_1777788115660.png'
-const coffeeImg = '/external-images/coffee_img_1777788128533.png'
 
 export default function ClientPage() {
     const { tableNumber } = useParams()
@@ -33,10 +26,30 @@ export default function ClientPage() {
     const [tipPercent, setTipPercent] = useState(10)
     const [tipAmount, setTipAmount] = useState('0')
 
-
+    // Premium UI States
+    const [activeCategory, setActiveCategory] = useState('')
+    const [isCartOpen, setIsCartOpen] = useState(false)
+    const [showScrollTop, setShowScrollTop] = useState(false)
+    const tabsContainerRef = useRef(null)
 
     const updateOrder = (newOrder) => {
         setOrder(newOrder)
+    }
+
+    useEffect(() => {
+        const handleScroll = () => {
+            if (window.scrollY > 300) {
+                setShowScrollTop(true)
+            } else {
+                setShowScrollTop(false)
+            }
+        }
+        window.addEventListener('scroll', handleScroll)
+        return () => window.removeEventListener('scroll', handleScroll)
+    }, [])
+
+    const scrollToTop = () => {
+        window.scrollTo({ top: 0, behavior: 'smooth' })
     }
 
     useEffect(() => {
@@ -239,6 +252,7 @@ export default function ClientPage() {
             setCart([])
             setNotes('')
             setShowAddMenu(false)
+            setIsCartOpen(false)
         } catch (err) {
             console.error('Eroare comandă:', err)
         }
@@ -292,100 +306,131 @@ export default function ClientPage() {
         }
     }, [tipPercent, myTotal, showBillModal])
 
-    const getProductImage = (catName) => {
-        const lower = catName.toLowerCase();
-        if (lower.includes('paste')) return pastaImg;
-        if (lower.includes('desert')) return dessertImg;
-        if (lower.includes('ciorbe')) return soupImg;
-        if (lower.includes('cafea')) return coffeeImg;
-        if (lower.includes('cocktails') || lower.includes('racoritoare') || lower.includes('bere')) return drinkImg;
-        return pizzaImg;
-    }
+    const getCartDestination = () => {
+        if (cart.length === 0) return 'în bucătărie'
+        
+        let hasFood = false
+        let hasDrinks = false
 
-    const CategoryDropdown = ({ catName, products }) => {
-        const [isOpen, setIsOpen] = useState(false)
-        const [isHovered, setIsHovered] = useState(false)
+        cart.forEach(item => {
+            const catName = (item.product.category?.name || '').toLowerCase()
+            const isDrink = catName.includes('băutur') || 
+                            catName.includes('bautur') || 
+                            catName.includes('drink') || 
+                            catName.includes('cocktail') || 
+                            catName.includes('racoritoare') || 
+                            catName.includes('bere') || 
+                            catName.includes('cafea') || 
+                            catName.includes('vin') ||
+                            catName.includes('suc')
 
-        return (
-            <div className={`category-wrapper ${isHovered ? 'hovered' : ''}`}>
-                <div
-                    className="category-header"
-                    onClick={() => setIsOpen(!isOpen)}
-                    onMouseEnter={() => setIsHovered(true)}
-                    onMouseLeave={() => setIsHovered(false)}
-                >
-                    <span style={{ letterSpacing: '-0.3px' }}>{catName}</span>
-                    <div style={{
-                        transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                        transition: 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        color: isOpen ? 'var(--primary)' : 'var(--text-muted)'
-                    }}>
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <polyline points="6 9 12 15 18 9"></polyline>
-                        </svg>
-                    </div>
-                </div>
-                {isOpen && (
-                    <div className="category-content">
-                        {products.map(product => (
-                            <div key={product.id} className="product-card">
-                                <div style={{ display: 'flex', alignItems: 'center', flex: 1, paddingRight: '16px' }}>
-                                    <img 
-                                        src={getProductImage(catName)} 
-                                        alt={product.name} 
-                                        style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '12px', marginRight: '16px', flexShrink: 0 }}
-                                    />
-                                    <div className="product-name" style={{ marginBottom: 0 }}>{product.name}</div>
-                                </div>
-                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px', flexShrink: 0 }}>
-                                    <div className="product-price">{product.price} lei</div>
-                                    <button className="add-btn" onClick={() => addToCart(product)}>
-                                        + Adaugă
-                                    </button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
-        )
-    }
-
-    const renderMenu = () => {
-        const availableProducts = menu.filter(p => p.is_available)
-        if (availableProducts.length === 0) return null
-
-        const grouped = {}
-        availableProducts.forEach(p => {
-            const catName = p.category.name
-            if (!grouped[catName]) grouped[catName] = []
-            grouped[catName].push(p)
+            if (isDrink) {
+                hasDrinks = true
+            } else {
+                hasFood = true
+            }
         })
 
-        return (
-            <div>
-                {Object.entries(grouped).map(([catName, products]) => (
-                    <CategoryDropdown key={catName} catName={catName} products={products} />
-                ))}
-            </div>
-        )
+        if (hasFood && hasDrinks) return 'la bar & bucătărie'
+        if (hasDrinks) return 'la bar'
+        return 'în bucătărie'
     }
+
+    // Premium Category & Images mapping
+    const getCategoryEmoji = (catName) => {
+        const lower = catName.toLowerCase();
+        if (lower.includes('pizz')) return '🍕';
+        if (lower.includes('past')) return '🍝';
+        if (lower.includes('desert') || lower.includes('dulce')) return '🍰';
+        if (lower.includes('ciorb') || lower.includes('sup')) return '🍲';
+        if (lower.includes('cafea')) return '☕';
+        if (lower.includes('băutur') || lower.includes('bautur') || lower.includes('drink') || lower.includes('cocktail') || lower.includes('racoritoare') || lower.includes('bere')) return '🍹';
+        return '🍽️';
+    }
+
+    const getProductImage = (product) => {
+        if (product.image) {
+            return product.image; // Use uploaded product-specific image from Django backend
+        }
+        // Fallback to beautiful local category images
+        const catName = product.category?.name || '';
+        const lower = catName.toLowerCase();
+        if (lower.includes('paste')) return '/external-images/pasta.png';
+        if (lower.includes('desert')) return '/external-images/dessert.png';
+        if (lower.includes('ciorbe')) return '/external-images/soup.png';
+        if (lower.includes('cafea')) return '/external-images/coffee.png';
+        if (lower.includes('cocktails') || lower.includes('racoritoare') || lower.includes('bere') || lower.includes('băuturi') || lower.includes('bauturi')) return '/external-images/drinks.png';
+        return '/external-images/pizza.png';
+    }
+
+    // Scroll to category section smoothly
+    const handleCategoryClick = (catName) => {
+        setActiveCategory(catName)
+        const element = document.getElementById(`category-${catName}`)
+        if (element) {
+            element.scrollIntoView({ behavior: 'smooth' })
+        }
+    }
+
+    // Auto-highlight active tab on scroll
+    useEffect(() => {
+        if (menu.length === 0 || !groupName) return
+
+        const sections = document.querySelectorAll('.products-category-section')
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const catId = entry.target.id.replace('category-', '')
+                    setActiveCategory(catId)
+                    
+                    // Auto-scroll the tabs bar to keep active tab visible
+                    const activeTabBtn = document.getElementById(`tab-btn-${catId}`)
+                    if (activeTabBtn && tabsContainerRef.current) {
+                        const container = tabsContainerRef.current
+                        const scrollLeft = activeTabBtn.offsetLeft - container.offsetWidth / 2 + activeTabBtn.offsetWidth / 2
+                        container.scrollTo({ left: scrollLeft, behavior: 'smooth' })
+                    }
+                }
+            })
+        }, {
+            root: null,
+            rootMargin: '-80px 0px -70% 0px' // triggers when section hits near top
+        })
+
+        sections.forEach(section => observer.observe(section))
+        return () => observer.disconnect()
+    }, [menu, groupName])
+
+    const availableProducts = menu.filter(p => p.is_available)
+
+    // Group products by category
+    const groupedProducts = {}
+    availableProducts.forEach(p => {
+        const catName = p.category.name
+        if (!groupedProducts[catName]) groupedProducts[catName] = []
+        groupedProducts[catName].push(p)
+    })
+
+    const categoriesList = Object.keys(groupedProducts)
 
     if (!groupName) {
         return (
             <div className="client-container">
-                <h1 className="client-title">Masa {tableNumber}</h1>
-                <div className="client-group-card">
-                    <h2 className="client-subtitle" style={{marginTop: 0}}>Cum vă numiți?</h2>
-                    <p style={{ color: 'var(--text-muted)', fontSize: 15, marginBottom: 24 }}>
-                        Introduceți un nume nou sau alăturați-vă unui grup existent.
+                <div className="client-brand-header">
+                    <h1 className="client-title">Masa {tableNumber}</h1>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '14px', fontWeight: '500' }}>Bun venit la restaurantul nostru!</p>
+                </div>
+                
+                <div className="client-welcome-card">
+                    <div className="client-welcome-icon">👋</div>
+                    <h2 style={{ fontSize: '20px', fontWeight: '800', textAlign: 'center', margin: '0 0 12px 0', fontFamily: 'var(--font-heading)' }}>Cum vă numiți?</h2>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '14px', marginBottom: '24px', textAlign: 'center', lineHeight: '1.5' }}>
+                        Pentru a plasa comenzi, introduceți numele dvs. sau alăturați-vă unui grup deja creat la această masă.
                     </p>
 
                     {existingGroups.length > 0 && (
-                        <div style={{ marginBottom: 24 }}>
-                            <div style={{ fontSize: 14, color: 'var(--text-muted)', marginBottom: 12, fontWeight: '600' }}>
+                        <div style={{ marginBottom: '24px' }}>
+                            <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '10px', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                                 Grupuri existente la această masă:
                             </div>
                             {existingGroups.map(group => (
@@ -397,10 +442,11 @@ export default function ClientPage() {
                                         setGroupId(group.id)
                                     }}
                                 >
-                                    {group.name}
+                                    <span>👥 {group.name}</span>
+                                    <span style={{ fontSize: '13px', color: 'var(--text-muted)', fontWeight: '500' }}>Alătură-te →</span>
                                 </button>
                             ))}
-                            <div style={{ fontSize: 13, color: 'var(--text-muted)', margin: '16px 0 12px', textAlign: 'center', fontWeight: '500' }}>
+                            <div style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '16px 0 12px', textAlign: 'center', fontWeight: '600' }}>
                                 — sau creați un grup nou —
                             </div>
                         </div>
@@ -408,7 +454,7 @@ export default function ClientPage() {
 
                     <input
                         className="client-group-input"
-                        placeholder="Numele grupului nou..."
+                        placeholder="Numele grupului nou (ex: Familia Ionescu)..."
                         value={groupInput}
                         onChange={e => setGroupInput(e.target.value)}
                         onKeyDown={e => e.key === 'Enter' && groupInput.trim() && setGroupName(groupInput.trim())}
@@ -417,52 +463,25 @@ export default function ClientPage() {
                         className="client-btn-primary"
                         onClick={() => groupInput.trim() && setGroupName(groupInput.trim())}
                     >
-                        Continuă
+                        Începe Răsfoirea Meniului
                     </button>
                 </div>
             </div>
         )
     }
-    if (loading) return <div className="client-center">Se încarcă...</div>
+
+    if (loading) {
+        return (
+            <div className="client-center">
+                <div className="premium-login-spinner"></div>
+                <div style={{ marginTop: '16px' }}>Se încarcă meniul digital...</div>
+            </div>
+        )
+    }
 
     return (
         <div className="client-container">
             <style>{`
-                .client-action-btn-row {
-                    display: flex;
-                    gap: 12px;
-                    justify-content: center;
-                    margin-bottom: 24px;
-                }
-                .client-action-btn {
-                    display: flex;
-                    align-items: center;
-                    gap: 8px;
-                    background: var(--surface);
-                    border: 1.5px solid var(--border);
-                    color: var(--text);
-                    padding: 10px 18px;
-                    border-radius: 9999px;
-                    font-weight: 700;
-                    font-size: 14px;
-                    cursor: pointer;
-                    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-                    box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05);
-                }
-                .client-action-btn:hover {
-                    transform: translateY(-2px);
-                    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
-                    border-color: var(--primary);
-                }
-                .client-action-btn-accent {
-                    background: var(--primary);
-                    border-color: var(--primary);
-                    color: white;
-                }
-                .client-action-btn-accent:hover {
-                    background: var(--primary-hover, #ef4444);
-                    border-color: var(--primary-hover, #ef4444);
-                }
                 .client-modal-backdrop {
                     position: fixed;
                     top: 0;
@@ -494,6 +513,7 @@ export default function ClientPage() {
                     margin: 0 0 8px 0;
                     color: #0f172a;
                     text-align: center;
+                    font-family: var(--font-heading);
                 }
                 .client-modal-label {
                     font-size: 12px;
@@ -518,8 +538,8 @@ export default function ClientPage() {
                 }
                 .client-select-btn.active {
                     background: #fef2f2;
-                    border-color: #ef4444;
-                    color: #ef4444;
+                    border-color: var(--primary);
+                    color: var(--primary);
                 }
                 .client-modal-input {
                     width: 100%;
@@ -534,39 +554,93 @@ export default function ClientPage() {
                 }
                 .client-modal-input:focus {
                     outline: none;
-                    border-color: #ef4444;
-                    box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
-                }
-                @keyframes clientFadeIn {
-                    from { opacity: 0; }
-                    to { opacity: 1; }
-                }
-                @keyframes clientScaleUp {
-                    from { transform: scale(0.95); opacity: 0; }
-                    to { transform: scale(1); opacity: 1; }
+                    border-color: var(--primary);
+                    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
                 }
             `}</style>
 
-            <h1 className="client-title">Masa {tableNumber}</h1>
-            <div style={{ textAlign: 'center', marginBottom: 16 }}>
-                <span className="client-group-badge">Grupul: {groupName}</span>
+            {/* Header Area */}
+            <div className="client-brand-header" style={{ paddingBottom: '16px' }}>
+                <h1 className="client-title">Masa {tableNumber}</h1>
+                <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginTop: '6px' }}>
+                    <span className="client-group-badge">👤 {groupName}</span>
+                </div>
             </div>
 
-            <div className="client-action-btn-row">
-                <button onClick={callWaiter} disabled={waiterCalled || isGroupPaid} className="client-action-btn">
-                    {waiterCalled ? '⏳ Solicitare trimisă...' : '🔔 Cheamă Ospătar'}
-                </button>
-                {order && myItems.length > 0 && !isGroupPaid && (
-                    <button onClick={() => setShowBillModal(true)} disabled={billRequested} className="client-action-btn client-action-btn-accent">
-                        {billRequested ? '⏳ Notă solicitată...' : '💳 Cere Nota'}
-                    </button>
-                )}
-            </div>
+            {/* Sticky Horizontal Categories Tabs */}
+            {categoriesList.length > 0 && (
+                <div className="category-tabs-container" ref={tabsContainerRef}>
+                    {categoriesList.map(catName => (
+                        <button
+                            key={catName}
+                            id={`tab-btn-${catName}`}
+                            className={`category-tab-btn ${activeCategory === catName ? 'active' : ''}`}
+                            onClick={() => handleCategoryClick(catName)}
+                        >
+                            <span>{getCategoryEmoji(catName)}</span>
+                            <span>{catName}</span>
+                        </button>
+                    ))}
+                </div>
+            )}
 
+            {/* MAIN MENU LISTING */}
+            {(!order || showAddMenu) && (
+                <div>
+                    <h2 className="client-subtitle" style={{ marginBottom: '4px' }}>
+                        {showAddMenu ? '➕ Adaugă la Comandă' : '📖 Meniu Complet'}
+                    </h2>
+                    
+                    {categoriesList.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                            Momentan nu există preparate disponibile.
+                        </div>
+                    ) : (
+                        categoriesList.map(catName => (
+                            <div key={catName} id={`category-${catName}`} className="products-category-section">
+                                <h3 className="products-category-section-title">
+                                    {getCategoryEmoji(catName)} {catName}
+                                </h3>
+                                <div className="products-grid">
+                                    {groupedProducts[catName].map(product => (
+                                        <div key={product.id} className="product-card">
+                                            <div className="product-image-container">
+                                                <img 
+                                                    src={getProductImage(product)} 
+                                                    alt={product.name} 
+                                                    className="product-image"
+                                                    onError={(e) => {
+                                                        e.target.onerror = null;
+                                                        e.target.src = '/external-images/pizza.png'; // safe fallback
+                                                    }}
+                                                />
+                                            </div>
+                                            <div className="product-info">
+                                                <h4 className="product-name">{product.name}</h4>
+                                                <p className="product-desc">
+                                                    {product.description || 'Pregătit proaspăt cu ingrediente de cea mai bună calitate de la furnizorii noștri.'}
+                                                </p>
+                                                <div className="product-meta-row">
+                                                    <span className="product-price">{product.price} lei</span>
+                                                    <button className="add-btn" onClick={() => addToCart(product)}>
+                                                        + Adaugă
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ))
+                    )}
+                </div>
+            )}
+
+            {/* Billing Modal overlay */}
             {showBillModal && (
                 <div className="client-modal-backdrop">
                     <div className="client-modal-content">
-                        <h3 className="client-modal-title">Solicitare Nota de Plată</h3>
+                        <h3 className="client-modal-title">Solicitare Notă de Plată</h3>
                         <div style={{ display: 'grid', gap: '16px', marginTop: '16px' }}>
                             {/* Method selection */}
                             <div>
@@ -631,11 +705,11 @@ export default function ClientPage() {
                             <div className="client-bill-summary" style={{ background: '#f8fafc', padding: '12px', borderRadius: '12px', border: '1px solid #e2e8f0', marginTop: '8px' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px' }}>
                                     <span>Consumație grup:</span>
-                                    <span style={{ fontWeight: '600' }}>{myTotal.toFixed(2)} lei</span>
+                                    <span style={{ fontWeight: '700' }}>{myTotal.toFixed(2)} lei</span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '14px', marginTop: '4px' }}>
                                     <span>Bacșiș ({tipPercent !== 'custom' ? `${tipPercent}%` : 'Personalizat'}):</span>
-                                    <span style={{ fontWeight: '600' }}>{parseFloat(tipAmount || 0).toFixed(2)} lei</span>
+                                    <span style={{ fontWeight: '700' }}>{parseFloat(tipAmount || 0).toFixed(2)} lei</span>
                                 </div>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '16px', fontWeight: '800', color: 'var(--primary)', borderTop: '1px dashed #cbd5e1', paddingTop: '8px', marginTop: '8px' }}>
                                     <span>Total de Plată:</span>
@@ -656,155 +730,162 @@ export default function ClientPage() {
                 </div>
             )}
 
-            {!order && !showAddMenu && (
-                <>
-                    <h2 className="client-subtitle">Meniu</h2>
-                    {renderMenu()}
-                    {cart.length > 0 && (
-                        <div className="cart-section">
-                            <h2 className="client-subtitle" style={{marginTop: 0}}>Coș</h2>
-                            {cart.map(item => (
-                                <div key={item.cartId} className="cart-item">
-                                    <div style={{ flex: 1 }}>
-                                        <div className="cart-item-header">
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <div className="quantity-selector">
-                                                    <button className="quantity-btn" onClick={() => updateCartQuantity(item.cartId, -1)}>-</button>
-                                                    <input 
-                                                        type="number" 
-                                                        min="1" 
-                                                        className="quantity-input" 
-                                                        value={item.quantity} 
-                                                        onChange={e => {
-                                                            const val = parseInt(e.target.value) || 1
-                                                            setCartQuantity(item.cartId, val)
-                                                        }} 
-                                                    />
-                                                    <button className="quantity-btn" onClick={() => updateCartQuantity(item.cartId, 1)}>+</button>
-                                                </div>
-                                                <span>{item.product.name}</span>
-                                            </div>
-                                            <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
-                                                <span style={{color: 'var(--primary)', fontWeight: '800'}}>{(item.quantity * item.product.price).toFixed(2)} lei</span>
-                                                <button className="remove-btn" onClick={() => removeFromCart(item.cartId)}>✕</button>
-                                            </div>
-                                        </div>
-                                        <input
-                                            className="cart-item-notes"
-                                            placeholder="Mențiuni speciale..."
-                                            value={item.notes || ''}
-                                            onChange={e => updateNotes(item.cartId, e.target.value)}
-                                        />
-                                    </div>
-                                </div>
-                            ))}
-                            <div className="cart-total">
-                                Total: {cart.reduce((s, i) => s + i.quantity * i.product.price, 0).toFixed(2)} lei
-                            </div>
-                            <button className="client-btn-primary" onClick={placeOrder}>
-                                Trimite comanda
-                            </button>
-                        </div>
-                    )}
-                </>
-            )}
-
-            {showAddMenu && (
-                <>
-                    <h2 className="client-subtitle">Adaugă la comandă</h2>
-                    {renderMenu()}
-                    {cart.length > 0 && (
-                        <div className="cart-section">
-                            <h2 className="client-subtitle" style={{marginTop: 0}}>Coș suplimentar</h2>
-                            {cart.map(item => (
-                                <div key={item.cartId} className="cart-item">
-                                    <div style={{ flex: 1 }}>
-                                        <div className="cart-item-header">
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                <div className="quantity-selector">
-                                                    <button className="quantity-btn" onClick={() => updateCartQuantity(item.cartId, -1)}>-</button>
-                                                    <input 
-                                                        type="number" 
-                                                        min="1" 
-                                                        className="quantity-input" 
-                                                        value={item.quantity} 
-                                                        onChange={e => {
-                                                            const val = parseInt(e.target.value) || 1
-                                                            setCartQuantity(item.cartId, val)
-                                                        }} 
-                                                    />
-                                                    <button className="quantity-btn" onClick={() => updateCartQuantity(item.cartId, 1)}>+</button>
-                                                </div>
-                                                <span>{item.product.name}</span>
-                                            </div>
-                                            <div style={{display: 'flex', alignItems: 'center', gap: '12px'}}>
-                                                <span style={{color: 'var(--primary)', fontWeight: '800'}}>{(item.quantity * item.product.price).toFixed(2)} lei</span>
-                                                <button className="remove-btn" onClick={() => removeFromCart(item.cartId)}>✕</button>
-                                            </div>
-                                        </div>
-                                        <input
-                                            className="cart-item-notes"
-                                            placeholder="Mențiuni speciale..."
-                                            value={item.notes || ''}
-                                            onChange={e => updateNotes(item.cartId, e.target.value)}
-                                        />
-                                    </div>
-                                </div>
-                            ))}
-                            <button className="client-btn-primary" onClick={placeOrder}>
-                                Adaugă la comanda #{order?.id}
-                            </button>
-                        </div>
-                    )}
-                    <button
-                        className="client-btn-secondary"
-                        onClick={() => { setShowAddMenu(false); setCart([]) }}
+            {/* STICKY FLOATING BOTTOM ACTION DECK */}
+            <div className="client-float-bottom-deck">
+                <div className="client-glass-pill">
+                    <button 
+                        onClick={callWaiter} 
+                        disabled={waiterCalled || isGroupPaid} 
+                        className="client-deck-btn"
                     >
-                        Anulează adăugarea
+                        {waiterCalled ? '⏳ Apel trimis...' : '🔔 Cheamă Ospătar'}
                     </button>
+
+                    {order && myItems.length > 0 && !isGroupPaid && (
+                        <button 
+                            onClick={() => setShowBillModal(true)} 
+                            disabled={billRequested} 
+                            className="client-deck-btn client-deck-btn-accent"
+                        >
+                            {billRequested ? '⏳ Cerut...' : '💳 Cere Nota'}
+                        </button>
+                    )}
+
+                    {cart.length > 0 && (
+                        <div 
+                            className="client-cart-deck-pill"
+                            onClick={() => setIsCartOpen(true)}
+                        >
+                            <span>🛒 Coș</span>
+                            <span className="client-cart-badge">{cart.reduce((s, i) => s + i.quantity, 0)}</span>
+                            <span style={{ fontSize: '11px', opacity: 0.9 }}>
+                                ({cart.reduce((s, i) => s + i.quantity * i.product.price, 0).toFixed(2)} L)
+                            </span>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* SLIDE-UP CHECKOUT DRAWER */}
+            {isCartOpen && (
+                <>
+                    <div className="client-drawer-backdrop" onClick={() => setIsCartOpen(false)} />
+                    <div className="client-drawer">
+                        <div className="client-drawer-header">
+                            <h3 className="client-drawer-title">🛒 Coșul tău</h3>
+                            <button className="client-drawer-close" onClick={() => setIsCartOpen(false)}>✕</button>
+                        </div>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            {cart.map(item => (
+                                <div key={item.cartId} className="cart-item">
+                                    <div className="cart-item-header">
+                                        <div className="cart-item-title-col">
+                                            <div className="quantity-selector">
+                                                <button className="quantity-btn" onClick={() => updateCartQuantity(item.cartId, -1)}>-</button>
+                                                <input 
+                                                    type="number" 
+                                                    min="1" 
+                                                    className="quantity-input" 
+                                                    value={item.quantity} 
+                                                    onChange={e => {
+                                                        const val = parseInt(e.target.value) || 1
+                                                        setCartQuantity(item.cartId, val)
+                                                    }} 
+                                                />
+                                                <button className="quantity-btn" onClick={() => updateCartQuantity(item.cartId, 1)}>+</button>
+                                            </div>
+                                            <span className="cart-item-title">{item.product.name}</span>
+                                        </div>
+                                        
+                                        <div className="cart-item-price-col">
+                                            <span className="cart-item-price">{(item.quantity * item.product.price).toFixed(2)} lei</span>
+                                            <button className="remove-btn" onClick={() => removeFromCart(item.cartId)}>✕</button>
+                                        </div>
+                                    </div>
+                                    <input
+                                        className="cart-item-notes"
+                                        placeholder="Mențiuni speciale (fără sare, sos separat etc.)..."
+                                        value={item.notes || ''}
+                                        onChange={e => updateNotes(item.cartId, e.target.value)}
+                                    />
+                                </div>
+                            ))}
+                        </div>
+
+                        <div className="cart-total-row">
+                            <span className="cart-total-label">Total de plată:</span>
+                            <span className="cart-total-price">
+                                {cart.reduce((s, i) => s + i.quantity * i.product.price, 0).toFixed(2)} lei
+                            </span>
+                        </div>
+
+                        <button className="client-btn-primary" onClick={placeOrder}>
+                            🚀 {showAddMenu ? `Adaugă la Comanda #${order?.id}` : 'Trimite comanda'}
+                        </button>
+                        
+                        {showAddMenu && (
+                            <button
+                                className="client-btn-secondary"
+                                onClick={() => { setShowAddMenu(false); setCart([]); setIsCartOpen(false) }}
+                            >
+                                Anulează adăugarea
+                            </button>
+                        )}
+                    </div>
                 </>
             )}
 
+            {/* ACTIVE ORDER STATUS SECTION */}
             {order && !showAddMenu && (
-                <div className="order-status-section">
-                    <h2 className="client-subtitle">Comanda ta — {groupName}</h2>
+                <div className="order-status-card">
+                    <h2 className="client-subtitle" style={{ margin: '0 0 16px 0', padding: 0 }}>
+                        📋 Comanda ta — {groupName}
+                    </h2>
+                    
                     {myItems.length === 0 ? (
-                        <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '32px 0', background: 'var(--surface)', borderRadius: 'var(--radius-lg)' }}>
-                            Nicio comandă plasată încă
+                        <div style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '24px 0', background: 'var(--surface-hover)', borderRadius: 'var(--radius-lg)', fontWeight: '600' }}>
+                            Nicio comandă plasată încă. Alege produse de mai sus!
                         </div>
                     ) : (
-                        myItems.map(item => (
-                            <div key={item.id} className="order-item-row">
-                                <div>
-                                    <span style={{fontWeight: '600'}}>{item.quantity}x {item.product.name}</span>
-                                    {item.notes && (
-                                        <div style={{ fontSize: 13, color: 'var(--warning)', marginTop: 4, fontWeight: '500' }}>
-                                            {item.notes}
-                                        </div>
-                                    )}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            {myItems.map(item => (
+                                <div key={item.id} className="order-item-row">
+                                    <div>
+                                        <span style={{ fontWeight: '700', fontSize: '15px' }}>{item.quantity}x {item.product.name}</span>
+                                        {item.notes && (
+                                            <div style={{ fontSize: '12px', color: 'var(--warning)', marginTop: '2px', fontWeight: '600' }}>
+                                                📝 {item.notes}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <span className="item-status-badge" style={{
+                                        background: item.status === 'ready' ? 'var(--success-bg)' : item.status === 'pending' ? 'var(--surface-hover)' : 'var(--info-bg)',
+                                        color: item.status === 'ready' ? 'var(--success)' : item.status === 'pending' ? 'var(--text-muted)' : 'var(--info)',
+                                        border: item.status === 'ready' ? '1px solid #a7f3d0' : '1px solid var(--border-color)'
+                                    }}>
+                                        {getStatusLabel(item.status)}
+                                    </span>
                                 </div>
-                                <span className="item-status-badge" style={{
-                                    background: item.status === 'ready' ? 'var(--success-bg)' : item.status === 'pending' ? 'var(--surface-hover)' : 'var(--info-bg)',
-                                    color: item.status === 'ready' ? 'var(--success)' : item.status === 'pending' ? 'var(--text-muted)' : 'var(--info)'
-                                }}>
-                                    {getStatusLabel(item.status)}
-                                </span>
-                            </div>
-                        ))
+                            ))}
+                        </div>
                     )}
-                    <div className="cart-total" style={{marginTop: '24px'}}>
-                        Total grup: {myItems
-                            .filter(i => i.status !== 'rejected')
-                            .reduce((s, i) => s + i.quantity * parseFloat(i.unit_price || 0), 0)
-                            .toFixed(2)} lei
-                    </div>
+                    
+                    {myItems.length > 0 && (
+                        <div className="cart-total-row" style={{ borderTopStyle: 'dashed', margin: '20px 0 0 0', paddingTop: '16px' }}>
+                            <span className="cart-total-label">Total consumat:</span>
+                            <span className="cart-total-price">
+                                {myTotal.toFixed(2)} lei
+                            </span>
+                        </div>
+                    )}
+
                     {!isGroupPaid ? (
                         <button
                             className="client-btn-secondary"
-                            style={{marginTop: '24px', background: 'var(--surface)'}}
-                            onClick={() => setShowAddMenu(true)}
+                            onClick={() => { setShowAddMenu(true); window.scrollTo({ top: 0, behavior: 'smooth' }) }}
                         >
-                            + Adaugă mai multe produse
+                            ➕ Adaugă mai multe produse
                         </button>
                     ) : (
                         <div style={{
@@ -815,14 +896,24 @@ export default function ClientPage() {
                             padding: '16px',
                             borderRadius: '16px',
                             textAlign: 'center',
-                            fontWeight: '700',
+                            fontWeight: '800',
                             fontSize: '15px',
                             animation: 'clientFadeIn 0.3s ease-out'
                         }}>
-                            🎉 Grupul tău a fost achitat cu succes! Vă mulțumim și vă mai așteptăm!
+                            🎉 Grupul tău a achitat nota cu succes! Vă mulțumim și vă mai așteptăm!
                         </div>
                     )}
                 </div>
+            )}
+
+            {showScrollTop && (
+                <button 
+                    className="back-to-top-btn" 
+                    onClick={scrollToTop}
+                    title="Înapoi sus"
+                >
+                    ▲
+                </button>
             )}
         </div>
     )

@@ -50,8 +50,8 @@ api.interceptors.response.use(
                     sessionStorage.removeItem('refresh_token')
                     localStorage.removeItem('access_token')
                     localStorage.removeItem('refresh_token')
-                    window.location.href = '/waiter'
                 }
+                window.location.href = '/login'
             }
         }
         return Promise.reject(error)
