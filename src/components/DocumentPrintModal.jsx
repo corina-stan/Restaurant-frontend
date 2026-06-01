@@ -429,7 +429,20 @@ export default function DocumentPrintModal({ isOpen, onClose, documentType, data
     // data can be the Payment object
     const payment = data;
     const order = payment.order_details || {};
-    const items = (payment.items || order.items || []).filter(i => i.status !== 'rejected');
+    
+    let rawItems = [];
+    if (payment.group) {
+      const groupData = (order.groups || []).find(g => g.id === payment.group);
+      if (groupData) {
+        rawItems = groupData.items || [];
+      } else {
+        rawItems = (order.items || []).filter(item => item.group === payment.group);
+      }
+    } else {
+      rawItems = payment.items || order.items || [];
+    }
+    
+    const items = rawItems.filter(i => i.status !== 'rejected');
     const tableNumber = order.table_number || order.session?.table?.number || '?';
     const waiterName = payment.collected_by_username || sessionStorage.getItem('waiter_username') || 'Sistem';
     const dateStr = new Date(payment.created_at || Date.now()).toLocaleString('ro-RO');
