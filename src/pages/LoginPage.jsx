@@ -38,18 +38,18 @@ export default function LoginPage() {
 
             if (isSuperuser || role === 'admin') {
                 sessionStorage.setItem('admin_token', token)
-                window.location.href = '/admin'
+                window.location.replace('/dashboard')
             } else if (role === 'waiter') {
                 sessionStorage.setItem('access_token', token)
                 sessionStorage.setItem('refresh_token', refresh)
                 sessionStorage.setItem('waiter_username', credentials.username)
-                window.location.href = '/waiter'
+                window.location.replace('/waiter')
             } else if (role === 'kitchen') {
                 sessionStorage.setItem('kitchen_token', token)
-                window.location.href = '/kitchen'
+                window.location.replace('/kitchen')
             } else if (role === 'barman') {
                 sessionStorage.setItem('bar_token', token)
-                window.location.href = '/bar'
+                window.location.replace('/bar')
             } else {
                 setError('Acest cont nu are un rol valid asociat.')
             }

@@ -617,9 +617,9 @@ export default function ClientPage() {
                                             </div>
                                             <div className="product-info">
                                                 <h4 className="product-name">{product.name}</h4>
-                                                <p className="product-desc">
-                                                    {product.description || 'Pregătit proaspăt cu ingrediente de cea mai bună calitate de la furnizorii noștri.'}
-                                                </p>
+                                                {product.description && (
+                                                    <p className="product-desc">{product.description}</p>
+                                                )}
                                                 <div className="product-meta-row">
                                                     <span className="product-price">{product.price} lei</span>
                                                     <button className="add-btn" onClick={() => addToCart(product)}>

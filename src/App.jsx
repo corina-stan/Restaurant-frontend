@@ -14,7 +14,7 @@ function App() {
         <Route path="/kitchen" element={<KitchenPage />} />
         <Route path="/waiter" element={<WaiterPage />} />
         <Route path="/bar" element={<BarPage />} />
-        <Route path="/admin" element={<AdminPage />} />
+        <Route path="/dashboard" element={<AdminPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/" element={<Navigate to="/login" replace />} />
         <Route path="*" element={<Navigate to="/login" replace />} />

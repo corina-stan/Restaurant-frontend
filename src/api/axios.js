@@ -42,7 +42,7 @@ api.interceptors.response.use(
                 } else if (path.startsWith('/bar')) {
                     sessionStorage.removeItem('bar_token')
                     localStorage.removeItem('bar_token')
-                } else if (path.startsWith('/admin')) {
+                } else if (path.startsWith('/dashboard')) {
                     sessionStorage.removeItem('admin_token')
                     localStorage.removeItem('admin_token')
                 } else {
@@ -51,7 +51,7 @@ api.interceptors.response.use(
                     localStorage.removeItem('access_token')
                     localStorage.removeItem('refresh_token')
                 }
-                window.location.href = '/login'
+                window.location.replace('/login')
             }
         }
         return Promise.reject(error)

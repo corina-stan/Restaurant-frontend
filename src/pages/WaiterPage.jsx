@@ -26,13 +26,22 @@ export default function WaiterPage() {
     const [showPaymentsHistory, setShowPaymentsHistory] = useState(false)
 
     useEffect(() => {
-        const savedToken = sessionStorage.getItem('access_token')
-        if (!savedToken) {
-            window.location.href = '/login'
-        } else {
-            setToken(savedToken)
-            setLoggedIn(true)
-            loadData(savedToken)
+        const checkAuth = () => {
+            const savedToken = sessionStorage.getItem('access_token')
+            if (!savedToken) {
+                window.location.replace('/login')
+            } else {
+                setToken(savedToken)
+                setLoggedIn(true)
+                loadData(savedToken)
+            }
+        }
+
+        checkAuth()
+
+        window.addEventListener('pageshow', checkAuth)
+        return () => {
+            window.removeEventListener('pageshow', checkAuth)
         }
     }, [])
 
@@ -40,7 +49,7 @@ export default function WaiterPage() {
         sessionStorage.removeItem('access_token')
         sessionStorage.removeItem('refresh_token')
         sessionStorage.removeItem('waiter_username')
-        window.location.href = '/login'
+        window.location.replace('/login')
     }
 
     const loadData = async (accessToken) => {

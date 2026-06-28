@@ -44,19 +44,28 @@ export default function BarPage() {
     }
 
     useEffect(() => {
-        const savedToken = sessionStorage.getItem('bar_token')
-        if (!savedToken) {
-            window.location.href = '/login'
-        } else {
-            setToken(savedToken)
-            setLoggedIn(true)
-            loadBarOrders(savedToken)
+        const checkAuth = () => {
+            const savedToken = sessionStorage.getItem('bar_token')
+            if (!savedToken) {
+                window.location.replace('/login')
+            } else {
+                setToken(savedToken)
+                setLoggedIn(true)
+                loadBarOrders(savedToken)
+            }
+        }
+
+        checkAuth()
+
+        window.addEventListener('pageshow', checkAuth)
+        return () => {
+            window.removeEventListener('pageshow', checkAuth)
         }
     }, [])
 
     const logout = () => {
         sessionStorage.removeItem('bar_token')
-        window.location.href = '/login'
+        window.location.replace('/login')
     }
 
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';

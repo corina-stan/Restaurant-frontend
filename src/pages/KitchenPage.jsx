@@ -49,19 +49,28 @@ export default function KitchenPage() {
     }
 
     useEffect(() => {
-        const savedToken = sessionStorage.getItem('kitchen_token')
-        if (!savedToken) {
-            window.location.href = '/login'
-        } else {
-            setToken(savedToken)
-            setLoggedIn(true)
-            loadKitchenOrders(savedToken)
+        const checkAuth = () => {
+            const savedToken = sessionStorage.getItem('kitchen_token')
+            if (!savedToken) {
+                window.location.replace('/login')
+            } else {
+                setToken(savedToken)
+                setLoggedIn(true)
+                loadKitchenOrders(savedToken)
+            }
+        }
+
+        checkAuth()
+
+        window.addEventListener('pageshow', checkAuth)
+        return () => {
+            window.removeEventListener('pageshow', checkAuth)
         }
     }, [])
 
     const logout = () => {
         sessionStorage.removeItem('kitchen_token')
-        window.location.href = '/login'
+        window.location.replace('/login')
     }
 
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';

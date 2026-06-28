@@ -31,11 +31,13 @@ export default function AdminPage() {
 
     // Editing & Creation state
     const [editingProduct, setEditingProduct] = useState(null)
-    const [editForm, setEditForm] = useState({ name: '', price: '', requires_recipe: true })
+    const [editForm, setEditForm] = useState({ name: '', price: '', requires_recipe: true, description: '' })
     const [productSearch, setProductSearch] = useState('')
     
     const [showNewProductForm, setShowNewProductForm] = useState(false)
-    const [newProductForm, setNewProductForm] = useState({ name: '', price: '', category: '', is_available: true, requires_recipe: true })
+    const [newProductForm, setNewProductForm] = useState({ name: '', price: '', category: '', is_available: true, requires_recipe: true, description: '' })
+    const [newProductImage, setNewProductImage] = useState(null)
+    const [editProductImage, setEditProductImage] = useState(null)
     
     const [showNewUserForm, setShowNewUserForm] = useState(false)
     const [newUserForm, setNewUserForm] = useState({ username: '', password: '', role: 'waiter', first_name: '', last_name: '' })
@@ -181,19 +183,28 @@ export default function AdminPage() {
     }
 
     useEffect(() => {
-        const savedToken = sessionStorage.getItem('admin_token')
-        if (!savedToken) {
-            window.location.href = '/login'
-        } else {
-            setToken(savedToken)
-            setLoggedIn(true)
-            loadData(savedToken)
+        const checkAuth = () => {
+            const savedToken = sessionStorage.getItem('admin_token')
+            if (!savedToken) {
+                window.location.replace('/login')
+            } else {
+                setToken(savedToken)
+                setLoggedIn(true)
+                loadData(savedToken)
+            }
+        }
+
+        checkAuth()
+
+        window.addEventListener('pageshow', checkAuth)
+        return () => {
+            window.removeEventListener('pageshow', checkAuth)
         }
     }, [])
 
     const logout = () => {
         sessionStorage.removeItem('admin_token')
-        window.location.href = '/login'
+        window.location.replace('/login')
     }
 
     const toggleCategory = (cat) => {
@@ -345,22 +356,51 @@ export default function AdminPage() {
 
     const startEditing = (product) => {
         setEditingProduct(product.id)
-        setEditForm({ name: product.name, price: product.price, requires_recipe: product.requires_recipe })
+        setEditForm({ name: product.name, price: product.price, requires_recipe: product.requires_recipe, description: product.description || '' })
     }
 
     const cancelEditing = () => {
         setEditingProduct(null)
-        setEditForm({ name: '', price: '', requires_recipe: true })
+        setEditForm({ name: '', price: '', requires_recipe: true, description: '' })
+        setEditProductImage(null)
     }
 
     const saveProduct = async (productId) => {
         try {
-            const res = await api.patch(
-                `/menu/products/${productId}/`,
-                { name: editForm.name, price: editForm.price, requires_recipe: editForm.requires_recipe },
-                { headers: { Authorization: `Bearer ${token}` } }
-            )
-            setProducts(prev => prev.map(p => p.id === productId ? { ...p, name: res.data.name, price: res.data.price, requires_recipe: res.data.requires_recipe } : p))
+            let res;
+            if (editProductImage) {
+                const formData = new FormData();
+                formData.append('name', editForm.name);
+                formData.append('price', editForm.price);
+                formData.append('requires_recipe', editForm.requires_recipe);
+                formData.append('description', editForm.description || '');
+                formData.append('image', editProductImage);
+
+                res = await api.patch(
+                    `/menu/products/${productId}/`,
+                    formData,
+                    {
+                        headers: {
+                            Authorization: `Bearer ${token}`,
+                            'Content-Type': 'multipart/form-data'
+                        }
+                    }
+                );
+            } else {
+                res = await api.patch(
+                    `/menu/products/${productId}/`,
+                    { name: editForm.name, price: editForm.price, requires_recipe: editForm.requires_recipe, description: editForm.description || '' },
+                    { headers: { Authorization: `Bearer ${token}` } }
+                );
+            }
+            setProducts(prev => prev.map(p => p.id === productId ? { 
+                ...p, 
+                name: res.data.name, 
+                price: res.data.price, 
+                requires_recipe: res.data.requires_recipe,
+                description: res.data.description,
+                image: res.data.image 
+            } : p))
             cancelEditing()
         } catch (err) {
             alert('Nu s-a putut salva produsul.')
@@ -373,10 +413,38 @@ export default function AdminPage() {
             return
         }
         try {
-            const res = await api.post('/menu/products/', newProductForm, { headers: { Authorization: `Bearer ${token}` } })
+            let res;
+            if (newProductImage) {
+                const formData = new FormData();
+                formData.append('name', newProductForm.name);
+                formData.append('price', newProductForm.price);
+                formData.append('category_id', newProductForm.category);
+                formData.append('is_available', newProductForm.is_available);
+                formData.append('requires_recipe', newProductForm.requires_recipe);
+                formData.append('description', newProductForm.description || '');
+                formData.append('image', newProductImage);
+
+                res = await api.post('/menu/products/', formData, {
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'multipart/form-data'
+                    }
+                });
+            } else {
+                const payload = {
+                    name: newProductForm.name,
+                    price: newProductForm.price,
+                    category_id: newProductForm.category,
+                    is_available: newProductForm.is_available,
+                    requires_recipe: newProductForm.requires_recipe,
+                    description: newProductForm.description || ''
+                };
+                res = await api.post('/menu/products/', payload, { headers: { Authorization: `Bearer ${token}` } })
+            }
             setProducts([...products, res.data])
             setShowNewProductForm(false)
-            setNewProductForm({ name: '', price: '', category: '', is_available: true, requires_recipe: true })
+            setNewProductForm({ name: '', price: '', category: '', is_available: true, requires_recipe: true, description: '' })
+            setNewProductImage(null)
         } catch (err) {
             alert('Eroare la crearea produsului.')
         }
@@ -714,7 +782,7 @@ export default function AdminPage() {
                             <div style={{ background: '#ffffff', padding: '24px', borderRadius: '16px', marginBottom: '32px', border: '1px solid #e2e8f0', position: 'relative' }}>
                                 <button onClick={() => setShowNewProductForm(false)} style={{ position: 'absolute', top: '24px', right: '24px', background: 'transparent', border: 'none', fontSize: '20px', cursor: 'pointer', color: '#94a3b8', padding: '0' }}>✕</button>
                                 <h3 style={{ marginTop: 0, marginBottom: '20px', fontSize: '18px', paddingRight: '24px' }}>Adaugă Produs</h3>
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '16px', alignItems: 'end' }}>
+                                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', alignItems: 'end' }}>
                                     <div>
                                         <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '600' }}>Denumire</label>
                                         <input value={newProductForm.name} onChange={e => setNewProductForm({...newProductForm, name: e.target.value})} style={{ width: '100%', padding: '10px', borderRadius: '8px', border: '1px solid #cbd5e1' }} />
@@ -730,13 +798,23 @@ export default function AdminPage() {
                                             {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                         </select>
                                     </div>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingBottom: '10px' }}>
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '600' }}>Descriere</label>
+                                        <textarea value={newProductForm.description} onChange={e => setNewProductForm({...newProductForm, description: e.target.value})} placeholder="Ingrediente, gramaje..." style={{ width: '100%', padding: '8px 10px', borderRadius: '8px', border: '1px solid #cbd5e1', height: '40px', resize: 'none', fontSize: '13px' }} />
+                                    </div>
+                                    <div>
+                                        <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', fontWeight: '600' }}>Imagine Produs</label>
+                                        <input type="file" accept="image/*" onChange={e => setNewProductImage(e.target.files[0])} style={{ width: '100%', padding: '8px', borderRadius: '8px', border: '1px solid #cbd5e1', background: '#f8fafc', fontSize: '12px' }} />
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', paddingBottom: '12px' }}>
                                         <input type="checkbox" checked={newProductForm.requires_recipe} onChange={e => setNewProductForm({...newProductForm, requires_recipe: e.target.checked})} style={{ width: '16px', height: '16px' }} />
                                         <label style={{ fontSize: '13px', fontWeight: '600', color: '#475569' }}>Are rețetă / Scade din stoc</label>
                                     </div>
-                                    <button onClick={createProduct} style={{ background: '#22c55e', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', height: '42px' }}>
-                                        Salvează
-                                    </button>
+                                    <div>
+                                        <button onClick={createProduct} style={{ background: '#22c55e', color: 'white', border: 'none', padding: '12px 24px', borderRadius: '8px', fontWeight: '600', cursor: 'pointer', height: '42px', width: '100%' }}>
+                                            Salvează
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         )}
@@ -763,18 +841,32 @@ export default function AdminPage() {
                                                         {editingProduct === product.id ? (
                                                             <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                                                                 <input value={editForm.name} onChange={e => setEditForm({...editForm, name: e.target.value})} style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+                                                                <textarea value={editForm.description} onChange={e => setEditForm({...editForm, description: e.target.value})} placeholder="Descriere ingrediente..." style={{ width: '100%', padding: '8px 12px', borderRadius: '6px', border: '1px solid #cbd5e1', minHeight: '60px', fontSize: '12px', resize: 'vertical' }} />
                                                                 <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '12px', color: '#475569', cursor: 'pointer' }}>
                                                                     <input type="checkbox" checked={editForm.requires_recipe} onChange={e => setEditForm({...editForm, requires_recipe: e.target.checked})} /> Are rețetă / Scade din stoc
                                                                 </label>
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '4px' }}>
+                                                                    <span style={{ fontSize: '11px', fontWeight: '600', color: '#64748b' }}>Schimbă Imaginea:</span>
+                                                                    <input type="file" accept="image/*" onChange={e => setEditProductImage(e.target.files[0])} style={{ fontSize: '12px' }} />
+                                                                </div>
                                                             </div>
                                                         ) : (
-                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                                                <span style={{ fontWeight: '600', color: '#0f172a' }}>{product.name}</span>
-                                                                {!product.has_recipe && product.requires_recipe && (
-                                                                    <span title="Acest produs necesită o rețetă dar nu ai adăugat nicio materie primă!" style={{ background: '#fef2f2', color: '#ef4444', padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '700', border: '1px solid #fca5a5' }}>
-                                                                        ⚠️ Fără Rețetă
-                                                                    </span>
+                                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                                {product.image ? (
+                                                                    <img src={product.image} alt={product.name} style={{ width: '44px', height: '44px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #cbd5e1', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }} />
+                                                                ) : (
+                                                                    <div style={{ width: '44px', height: '44px', background: '#e2e8f0', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '18px', color: '#94a3b8', border: '1px dashed #cbd5e1' }}>
+                                                                        🍽️
+                                                                    </div>
                                                                 )}
+                                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                                                    <span style={{ fontWeight: '600', color: '#0f172a' }}>{product.name}</span>
+                                                                    {!product.has_recipe && product.requires_recipe && (
+                                                                        <span title="Acest produs necesită o rețetă dar nu ai adăugat nicio materie primă!" style={{ display: 'inline-block', width: 'fit-content', background: '#fef2f2', color: '#ef4444', padding: '2px 8px', borderRadius: '12px', fontSize: '11px', fontWeight: '700', border: '1px solid #fca5a5' }}>
+                                                                            ⚠️ Fără Rețetă
+                                                                        </span>
+                                                                    )}
+                                                                </div>
                                                             </div>
                                                         )}
                                                     </div>
@@ -1978,9 +2070,9 @@ function InteractiveSVGChart({ data, type }) {
     const datasets = data.datasets
 
     // Dimensions
-    const width = 750
-    const height = 350
-    const padding = { top: 30, right: 30, bottom: 40, left: 60 }
+    const width = 1000
+    const height = 280
+    const padding = { top: 20, right: 30, bottom: 45, left: 65 }
 
     const chartWidth = width - padding.left - padding.right
     const chartHeight = height - padding.top - padding.bottom
@@ -1996,22 +2088,24 @@ function InteractiveSVGChart({ data, type }) {
     })
     if (maxVal === 0) maxVal = 100 // default range if no sales
     
-    // Round maxVal to a nice number
+    // Round maxVal to a nice number dynamically
     const roundToNiceNumber = (num) => {
+        if (num <= 0) return 10
         if (num <= 10) return 10
-        if (num <= 50) return 50
-        if (num <= 100) return 100
-        if (num <= 500) return 500
-        if (num <= 1000) return 1000
-        if (num <= 5000) return 5000
-        if (num <= 10000) return 10000
         const magnitude = Math.pow(10, Math.floor(Math.log10(num)))
         const normalized = num / magnitude
         let rounded
-        if (normalized <= 1.5) rounded = 1.5
-        else if (normalized <= 2) rounded = 2
-        else if (normalized <= 5) rounded = 5
-        else rounded = 10
+        if (normalized <= 1.0) rounded = 1.0
+        else if (normalized <= 1.2) rounded = 1.2
+        else if (normalized <= 1.5) rounded = 1.5
+        else if (normalized <= 2.0) rounded = 2.0
+        else if (normalized <= 2.5) rounded = 2.5
+        else if (normalized <= 3.0) rounded = 3.0
+        else if (normalized <= 4.0) rounded = 4.0
+        else if (normalized <= 5.0) rounded = 5.0
+        else if (normalized <= 6.0) rounded = 6.0
+        else if (normalized <= 8.0) rounded = 8.0
+        else rounded = 10.0
         return rounded * magnitude
     }
     maxVal = roundToNiceNumber(maxVal * 1.1)
@@ -2041,7 +2135,7 @@ function InteractiveSVGChart({ data, type }) {
     })
 
     return (
-        <div style={{ position: 'relative', background: '#ffffff', padding: '10px 0', borderRadius: '16px' }}>
+        <div style={{ position: 'relative', background: '#ffffff', padding: '10px 0', borderRadius: '16px', maxWidth: '1000px', margin: '0 auto' }}>
             <svg viewBox={`0 0 ${width} ${height}`} width="100%" height="100%" style={{ overflow: 'visible' }}>
                 <defs>
                     {datasets.map((_, dIdx) => {

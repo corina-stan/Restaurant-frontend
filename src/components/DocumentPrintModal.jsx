@@ -70,13 +70,13 @@ export default function DocumentPrintModal({ isOpen, onClose, documentType, data
     return (
       <div className="receipt-thermal">
         <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '12px' }}>
-          RESTAURANT PLATFORM S.R.L.
+          SC RMS DEMO SRL
         </div>
         <div style={{ textAlign: 'center', fontSize: '8.5pt' }}>
-          Str. Principala Nr. 10, Cluj-Napoca
+          Str. Mureșenilor nr. 1, Brașov, jud. Brașov
         </div>
         <div style={{ textAlign: 'center', fontSize: '8.5pt' }}>
-          C.U.I.: RO987654321
+          C.U.I.: RO12345678
         </div>
         <div className="dashed-line" />
         <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '12px', margin: '4px 0' }}>
@@ -256,13 +256,13 @@ export default function DocumentPrintModal({ isOpen, onClose, documentType, data
     return (
       <div className="receipt-thermal">
         <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '12px' }}>
-          RESTAURANT PLATFORM S.R.L.
+          SC RMS DEMO SRL
         </div>
         <div style={{ textAlign: 'center', fontSize: '8.5pt' }}>
-          Str. Principala Nr. 10, Cluj-Napoca
+          Str. Mureșenilor nr. 1, Brașov, jud. Brașov
         </div>
         <div style={{ textAlign: 'center', fontSize: '8.5pt' }}>
-          C.U.I.: RO987654321
+          C.U.I.: RO12345678
         </div>
         <div className="dashed-line" />
         <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '12px', margin: '4px 0' }}>
@@ -481,13 +481,13 @@ export default function DocumentPrintModal({ isOpen, onClose, documentType, data
     return (
       <div className="receipt-thermal">
         <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '12px' }}>
-          RESTAURANT PLATFORM S.R.L.
+          SC RMS DEMO SRL
         </div>
         <div style={{ textAlign: 'center', fontSize: '8.5pt' }}>
-          Str. Principala Nr. 10, Cluj-Napoca
+          Str. Mureșenilor nr. 1, Brașov, jud. Brașov
         </div>
         <div style={{ textAlign: 'center', fontSize: '8.5pt' }}>
-          C.U.I.: RO987654321 | Reg.Com: J40/12345/2025
+          C.U.I.: RO12345678 | Reg.Com: J08/1234/2024
         </div>
         <div className="dashed-line" />
         <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '12px', margin: '4px 0' }}>
@@ -611,9 +611,10 @@ export default function DocumentPrintModal({ isOpen, onClose, documentType, data
         <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '2px solid #000000', paddingBottom: '10px' }}>
           <div style={{ width: '48%' }}>
             <div style={{ fontWeight: 'bold', fontSize: '11pt' }}>UNITATEA BENEFICIARĂ:</div>
-            <div style={{ fontWeight: '800', fontSize: '12pt' }}>RESTAURANT PLATFORM S.R.L.</div>
-            <div>C.U.I.: RO987654321</div>
-            <div>Adresă: Str. Principală Nr. 10, Cluj-Napoca</div>
+            <div style={{ fontWeight: '800', fontSize: '12pt' }}>SC RMS DEMO SRL</div>
+            <div>C.U.I.: RO12345678</div>
+            <div>Reg.Com: J08/1234/2024</div>
+            <div>Adresă: Str. Mureșenilor nr. 1, Brașov, jud. Brașov</div>
             <div>Punct lucru: Gestiune Restaurant</div>
           </div>
           <div style={{ width: '48%', borderLeft: '1px solid #000000', paddingLeft: '15px' }}>
