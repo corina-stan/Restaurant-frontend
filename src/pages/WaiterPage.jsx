@@ -17,6 +17,106 @@ export default function WaiterPage() {
     const [tip, setTip] = useState(0)
     const [paidGroups, setPaidGroups] = useState(new Set())
     const [username, setUsername] = useState(sessionStorage.getItem('waiter_username') || '')
+    const dismissedItemIds = useRef(new Set())
+
+    const syncNotificationsFromOrders = (ordersList) => {
+        setNotifications(prev => {
+            let updated = [...prev]
+
+            ordersList.forEach(order => {
+                const tableNum = order.table_number
+                if (order.status === 'open') {
+                    // 1. Check waiter called (assistance)
+                    if (order.waiter_called) {
+                        const exists = updated.some(n => n.type === 'assistance_requested' && parseInt(n.table_number) === parseInt(tableNum))
+                        if (!exists) {
+                            updated.push({
+                                type: 'assistance_requested',
+                                table_number: tableNum,
+                                message: `Masa ${tableNum} cere asistență`
+                            })
+                        }
+                    }
+
+                    // 2. Check bill requested
+                    if (order.bill_requested) {
+                        const exists = updated.some(n => n.type === 'bill_requested' && parseInt(n.table_number) === parseInt(tableNum))
+                        if (!exists) {
+                            updated.push({
+                                type: 'bill_requested',
+                                table_number: tableNum,
+                                payment_method: order.bill_payment_method || 'cash',
+                                tip: order.bill_tip || 0,
+                                group_name: null,
+                                group_id: null,
+                                message: `💳 Masa ${tableNum} cere NOTA (${order.bill_payment_method === 'cash' ? 'Cash' : order.bill_payment_method === 'card' ? 'Card' : 'Tichet'}) cu bacșiș ${order.bill_tip} lei!`
+                            })
+                        }
+                    }
+
+                    // 3. Check ready items
+                    const processItem = (item) => {
+                        if (item.status === 'ready' && !dismissedItemIds.current.has(item.id)) {
+                            const exists = updated.some(n => n.type === 'item_ready' && n.item_id === item.id)
+                            if (!exists) {
+                                updated.push({
+                                    type: 'item_ready',
+                                    item_id: item.id,
+                                    product_name: item.product.name,
+                                    table_number: tableNum,
+                                    order_id: order.id
+                                })
+                            }
+                        }
+                    }
+
+                    if (order.groups && order.groups.length > 0) {
+                        order.groups.forEach(g => {
+                            g.items?.forEach(processItem)
+                        })
+                    } else if (order.items) {
+                        order.items.forEach(processItem)
+                    }
+                }
+            })
+
+            // Clean up notifications that are no longer valid on the backend (e.g. served, rejected, or table paid/dismissed)
+            updated = updated.filter(n => {
+                if (n.type === 'item_ready') {
+                    let stillReady = false
+                    ordersList.forEach(order => {
+                        if (order.status === 'open') {
+                            const checkItem = (item) => {
+                                if (item.id === n.item_id && item.status === 'ready') {
+                                    stillReady = true
+                                }
+                            }
+                            if (order.groups && order.groups.length > 0) {
+                                order.groups.forEach(g => g.items?.forEach(checkItem))
+                            } else if (order.items) {
+                                order.items.forEach(checkItem)
+                            }
+                        }
+                    })
+                    return stillReady && !dismissedItemIds.current.has(n.item_id)
+                }
+
+                if (n.type === 'assistance_requested') {
+                    const orderForTable = ordersList.find(o => o.table_number === parseInt(n.table_number) && o.status === 'open')
+                    return orderForTable ? orderForTable.waiter_called : false
+                }
+
+                if (n.type === 'bill_requested') {
+                    const orderForTable = ordersList.find(o => o.table_number === parseInt(n.table_number) && o.status === 'open')
+                    return orderForTable ? orderForTable.bill_requested : false
+                }
+
+                return true
+            })
+
+            return updated
+        })
+    }
 
     // Printing and history states
     const [printModalOpen, setPrintModalOpen] = useState(false)
@@ -70,6 +170,7 @@ export default function WaiterPage() {
                 })
             })
             setPaidGroups(paidGroupIds)
+            syncNotificationsFromOrders(ordersRes.data)
         } catch (err) {
             console.error('Eroare:', err)
         }
@@ -81,6 +182,7 @@ export default function WaiterPage() {
                 headers: { Authorization: `Bearer ${accessToken}` }
             })
             setOrders(res.data)
+            syncNotificationsFromOrders(res.data)
         } catch (err) {
             console.error('Eroare:', err)
         }
@@ -190,13 +292,17 @@ export default function WaiterPage() {
 
     const dismissNotification = async (idx) => {
         const n = notifications[idx]
-        if (n && (n.type === 'assistance_requested' || n.type === 'bill_requested') && n.table_number) {
-            try {
-                await api.post(`/tables/${n.table_number}/dismiss_notification/`, {}, {
-                    headers: { Authorization: `Bearer ${token}` }
-                })
-            } catch (err) {
-                console.error(err)
+        if (n) {
+            if ((n.type === 'assistance_requested' || n.type === 'bill_requested') && n.table_number) {
+                try {
+                    await api.post(`/tables/${n.table_number}/dismiss_notification/`, {}, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    })
+                } catch (err) {
+                    console.error(err)
+                }
+            } else if (n.type === 'item_ready' && n.item_id) {
+                dismissedItemIds.current.add(n.item_id)
             }
         }
         setNotifications(prev => prev.filter((_, i) => i !== idx))
@@ -576,9 +682,32 @@ export default function WaiterPage() {
                                                                         </div>
                                                                     )}
                                                                 </div>
-                                                                <span className="status-pill" style={{ background: getStatusColor(item.status) }}>
-                                                                    {getStatusLabel(item.status)}
-                                                                </span>
+                                                                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                                    <span className="status-pill" style={{ background: getStatusColor(item.status) }}>
+                                                                        {getStatusLabel(item.status)}
+                                                                    </span>
+                                                                    {item.status === 'ready' && (
+                                                                        <button 
+                                                                            onClick={() => markServed(item.id)}
+                                                                            style={{
+                                                                                padding: '6px 12px',
+                                                                                background: 'linear-gradient(135deg, #10b981, #059669)',
+                                                                                color: 'white',
+                                                                                border: 'none',
+                                                                                borderRadius: '8px',
+                                                                                cursor: 'pointer',
+                                                                                fontSize: '12px',
+                                                                                fontWeight: '700',
+                                                                                boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)',
+                                                                                transition: 'all 0.2s'
+                                                                            }}
+                                                                            onMouseEnter={e => e.currentTarget.style.filter = 'brightness(1.1)'}
+                                                                            onMouseLeave={e => e.currentTarget.style.filter = 'brightness(1.0)'}
+                                                                        >
+                                                                            Servit
+                                                                        </button>
+                                                                    )}
+                                                                </div>
                                                             </div>
                                                         ))}
                                                         {!isPaid && (
@@ -629,9 +758,32 @@ export default function WaiterPage() {
                                                             </div>
                                                         )}
                                                     </div>
-                                                    <span className="status-pill" style={{ background: getStatusColor(item.status) }}>
-                                                        {getStatusLabel(item.status)}
-                                                    </span>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                                        <span className="status-pill" style={{ background: getStatusColor(item.status) }}>
+                                                            {getStatusLabel(item.status)}
+                                                        </span>
+                                                        {item.status === 'ready' && (
+                                                            <button 
+                                                                onClick={() => markServed(item.id)}
+                                                                style={{
+                                                                    padding: '6px 12px',
+                                                                    background: 'linear-gradient(135deg, #10b981, #059669)',
+                                                                    color: 'white',
+                                                                    border: 'none',
+                                                                    borderRadius: '8px',
+                                                                    cursor: 'pointer',
+                                                                    fontSize: '12px',
+                                                                    fontWeight: '700',
+                                                                    boxShadow: '0 2px 4px rgba(16, 185, 129, 0.2)',
+                                                                    transition: 'all 0.2s'
+                                                                }}
+                                                                onMouseEnter={e => e.currentTarget.style.filter = 'brightness(1.1)'}
+                                                                onMouseLeave={e => e.currentTarget.style.filter = 'brightness(1.0)'}
+                                                            >
+                                                                Servit
+                                                            </button>
+                                                        )}
+                                                    </div>
                                                 </div>
                                             ))}
                                             <div style={{ fontWeight: '800', marginTop: 24, fontSize: 20, textAlign: 'right', color: '#0f172a' }}>
